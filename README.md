@@ -8,7 +8,7 @@
 **VidoPlay** is a modern, feature-rich video player for Android built with Jetpack Compose and Media3 ExoPlayer. It supports local video playback, network streaming, advanced audio/video controls, and a beautiful glassmorphic UI.
 
 <p align="center">
-  <img src="screenshots/player_portrait.png" width="30%" alt="Player Portrait" />
+  <img src="Screenshot_20260410-183417.png" width="30%" alt="Player Portrait" />
   <img src="screenshots/player_landscape.png" width="30%" alt="Player Landscape" />
   <img src="screenshots/stream_url.png" width="30%" alt="Stream URL Screen" />
 </p>
