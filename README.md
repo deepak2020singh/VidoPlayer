@@ -9,7 +9,7 @@
 
 <p align="center">
   <img src="Screenshot_20260410-183417.png" width="30%" alt="Player Portrait" />
-  <img src="screenshots/player_landscape.png" width="30%" alt="Player Landscape" />
+  <img src="Screenshot_20260410-183540.png" width="30%" alt="Player Landscape" />
   <img src="screenshots/stream_url.png" width="30%" alt="Stream URL Screen" />
 </p>
 
