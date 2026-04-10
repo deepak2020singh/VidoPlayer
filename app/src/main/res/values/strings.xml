@@ -1,0 +1,185 @@
+<resources>
+    <!-- App Name -->
+    <string name="app_name">vidoPlay</string>
+
+    <!-- Navigation -->
+    <string name="about">About</string>
+    <string name="vidoPlay">VIDOPLAY</string>
+
+    <!-- Splash Screen -->
+    <string name="splash_tagline">Your Ultimate Video Experience</string>
+    <string name="splash_play_symbol">▶</string>
+
+    <!-- File Screen -->
+    <string name="my_library">My Library</string>
+    <string name="folder">Folder</string>
+    <string name="all_videos">All Videos</string>
+    <string name="loading_videos">Loading videos...</string>
+    <string name="please_wait_scan">Please wait while we scan your library</string>
+    <string name="refreshing_videos">Refreshing videos...</string>
+    <string name="video_not_found">Video not found</string>
+    <string name="videos">VIDEOS</string>
+    <string name="total_size">TOTAL SIZE</string>
+    <string name="no_videos_found">No videos found</string>
+    <string name="no_videos_in_folder">No videos in this folder</string>
+    <string name="no_video_folders_found">No video folders found</string>
+    <string name="missing">Missing</string>
+    <string name="file_missing">File missing</string>
+    <string name="watched_percent">%d%% watched</string>
+    <string name="continue_text">Continue</string>
+    <string name="resume">Resume</string>
+    <string name="percent_watched">%d%% watched</string>
+    <string name="access_required">Access Required</string>
+    <string name="allow_browse_videos">Allow VidoPlay to browse\nyour video library</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="permission_required">Permission Required</string>
+    <string name="permission_message">VidoPlay needs access to your videos to display them.</string>
+    <string name="allow">Allow</string>
+    <string name="deny">Deny</string>
+    <string name="list_view">List View</string>
+    <string name="grid_view">Grid View</string>
+    <string name="duration">Duration</string>
+    <string name="size">Size</string>
+    <string name="date_added">Date Added</string>
+    <string name="location">Location</string>
+    <string name="file_name">File Name</string>
+
+    <!-- Search Screen -->
+    <string name="search_videos_folders">Search videos, folders…</string>
+    <string name="all">All</string>
+    <string name="videos_lower">Videos</string>
+    <string name="folders">Folders</string>
+    <string name="recent_searches">Recent Searches</string>
+    <string name="clear_all">Clear All</string>
+    <string name="no_recent_searches">No recent searches</string>
+    <string name="found_results">Found %d results for "%s"</string>
+    <string name="no_results_found">No results found</string>
+    <string name="no_videos_or_folders_match">No videos or folders match "%s"</string>
+    <string name="try_different_keywords">Try different keywords</string>
+
+    <!-- Playlists Screen -->
+    <string name="playlists_title">Playlists</string>
+    <string name="my_playlists_tab">My Playlists</string>
+    <string name="recent_tab">Recent</string>
+    <string name="create_playlist_fab">Create playlist</string>
+    <string name="delete_playlist_title">Delete Playlist</string>
+    <string name="delete_button">Delete</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="open_menu">Open</string>
+    <string name="edit_menu">Edit</string>
+    <string name="delete_menu">Delete</string>
+    <string name="more_options">More</string>
+    <string name="close_sheet">Close</string>
+    <string name="remove_video">Remove</string>
+    <string name="recently_added_title">Recently Added</string>
+    <string name="no_playlists_yet_title">No Playlists Yet</string>
+    <string name="no_playlists_yet_message">Create your first playlist to organize your videos</string>
+    <string name="create_playlist_button">Create Playlist</string>
+    <string name="create_playlist_dialog_title">Create Playlist</string>
+    <string name="edit_playlist_dialog_title">Edit Playlist</string>
+    <string name="playlist_name_label">Playlist Name</string>
+    <string name="playlist_description_label">Description (optional)</string>
+    <string name="create_button">Create</string>
+    <string name="save_button">Save</string>
+    <string name="playlists">Playlists</string>
+    <string name="my_playlists">My Playlists</string>
+    <string name="recent">Recent</string>
+    <string name="create_playlist">Create Playlist</string>
+    <string name="edit_playlist">Edit Playlist</string>
+    <string name="delete_playlist">Delete Playlist</string>
+    <string name="delete_playlist_confirmation">Delete "%s"? This cannot be undone.</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="playlist_name">Playlist Name</string>
+    <string name="description_optional">Description (optional)</string>
+    <string name="create">Create</string>
+    <string name="save">Save</string>
+    <string name="no_videos_in_playlist">No videos in this playlist</string>
+    <string name="no_playlists_yet">No Playlists Yet</string>
+    <string name="create_first_playlist">Create your first playlist to organize your videos</string>
+    <string name="videos_count">%d videos</string>
+    <string name="open">Open</string>
+    <string name="edit">Edit</string>
+    <string name="recently_added">Recently Added</string>
+    <string name="no_recent_videos">No recent videos</string>
+    <string name="add_to_playlist">Add to %s</string>
+    <string name="no_playlists_yet_short">No playlists yet</string>
+    <string name="playlist_count">%d playlists</string>
+
+
+    <!-- Settings Screen -->
+    <string name="settings">Settings</string>
+    <string name="theme">Theme</string>
+    <string name="system">System</string>
+    <string name="light">Light</string>
+    <string name="dark">Dark</string>
+    <string name="material_you">Material You</string>
+    <string name="use_wallpaper_colors">Use your wallpaper colors</string>
+    <string name="color_scheme">Color Scheme</string>
+    <string name="defaults">Default</string>
+    <string name="blue">Blue</string>
+    <string name="green">Green</string>
+    <string name="purple">Purple</string>
+    <string name="orange">Orange</string>
+    <string name="red">Red</string>
+    <string name="theme_preview">Theme Preview</string>
+    <string name="sample_text">Sample Text</string>
+    <string name="secondary_text">Secondary Text</string>
+    <string name="tip_material_you">💡 Tip: Enable Material You in Theme settings for dynamic colors from your wallpaper</string>
+    <string name="version">Version</string>
+    <string name="rate_the_app">Rate the App</string>
+    <string name="love_vidoplay">Love VidoPlay? Rate us on Play Store</string>
+    <string name="terms_privacy">Terms &amp; Privacy</string>
+    <string name="read_terms_privacy">Read our terms and privacy policy</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="terms_of_service">Terms of Service</string>
+    <string name="open_source_licenses">Open Source Licenses</string>
+    <string name="made_with_love">Made with ❤️ for video lovers</string>
+    <string name="vidoplay_version">VidoPlay v1.0.0</string>
+
+    <!-- About Screen -->
+
+    <string name="about_title">About</string>
+    <string name="your_ultimate_video_player">Your Ultimate Video Player</string>
+    <string name="app_description">Experience high-quality video playback with advanced features, customizable controls, and seamless performance. Perfect for all your media needs.</string>
+    <string name="key_features">✨ Key Features</string>
+    <string name="high_quality_playback">High-Quality Playback</string>
+    <string name="high_quality_desc">Supports all major video formats with hardware acceleration</string>
+    <string name="picture_in_picture">Picture-in-Picture</string>
+    <string name="pip_desc">Watch videos while using other apps</string>
+    <string name="variable_speed">Variable Speed</string>
+    <string name="variable_speed_desc">Adjust playback speed from 0.25x to 3x</string>
+    <string name="audio_controls">Audio Controls</string>
+    <string name="audio_controls_desc">Volume, equalizer, and audio track selection</string>
+    <string name="screenshots">Screenshots</string>
+    <string name="screenshots_desc">Capture and save video frames instantly</string>
+    <string name="connect_with_us">🔗 Connect With Us</string>
+    <string name="email">Email</string>
+    <string name="rate">Rate</string>
+    <string name="share">Share</string>
+    <string name="share_text">Check out VidoPlay - The ultimate video player! https://play.google.com/store/apps/details?id=%s</string>
+    <string name="share_vidoplay">Share VidoPlay</string>
+    <string name="vidoplay_support">VidoPlay Support</string>
+    <string name="app_logo">App Logo</string>
+
+    <!-- Common -->
+    <string name="back">Back</string>
+    <string name="search">Search</string>
+    <string name="refresh">Refresh</string>
+    <string name="details">Details</string>
+    <string name="play">Play</string>
+    <string name="remove">Remove</string>
+    <string name="close">Close</string>
+
+    <!-- Format strings -->
+    <string name="videos_count_short">%d videos</string>
+    <string name="folders_count">%d folders</string>
+    <string name="videos_count_formatted">%d videos, %s</string>
+
+    <!-- Video Screen -->
+    <string name="controlsAlpha">controlsAlpha</string>
+    <string name="glowAlpha">glowAlpha</string>
+    <string name="glowScale">glowScale</string>
+    <string name="continueInBackground">Continue in Background?</string>
+    <string name="PlaybackContinues">Playback continues after you close the player.</string>
+</resources>
