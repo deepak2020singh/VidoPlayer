@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -68,8 +69,6 @@ import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -98,6 +97,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -121,6 +121,7 @@ import com.foss.vidoplay.presentation.common.ViewMode
 import com.foss.vidoplay.presentation.common.formatDuration
 import com.foss.vidoplay.presentation.common.glassCard
 import com.foss.vidoplay.presentation.common.glassChip
+import com.foss.vidoplay.presentation.common.glassPanel
 import com.foss.vidoplay.presentation.viewModel.LastPlayedViewModel
 import com.foss.vidoplay.presentation.viewModel.PlaylistViewModel
 import com.foss.vidoplay.presentation.viewModel.ThemeViewModel
@@ -1089,201 +1090,279 @@ fun VideoItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlassVideoDetailsBottomSheet(
-    video: VideoFile, viewModel: VideoViewModel, onDismiss: () -> Unit, onPlay: () -> Unit
+    video: VideoFile,
+    viewModel: VideoViewModel,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit
 ) {
     val context = LocalContext.current
     val textPrimary = GlassTokens.getTextPrimary()
     val textSecondary = GlassTokens.getTextSecondary()
+    val primaryColor = MaterialTheme.colorScheme.primary
     val isDark = GlassTokens.isDarkTheme()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (isDark) Color(0xFF1A1C1E) else Color(0xFFFFFFFF),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        containerColor = Color.Transparent,  // Let the glass panel provide the background
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = null
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .glassPanel(cornerRadius = 28.dp)
                 .padding(20.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                if (video.thumbnailUri != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(video.thumbnailUri)
-                            .crossfade(true).build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
+                // Thumbnail with play overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    if (video.thumbnailUri != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(video.thumbnailUri)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.VideoLibrary,
+                                null,
+                                tint = textSecondary,
+                                modifier = Modifier.size(60.dp)
+                            )
+                        }
+                    }
+
+                    // Play button overlay
                     Box(
-                        modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .clickable {
+                                onDismiss()
+                                onPlay()
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Outlined.VideoLibrary,
+                            Icons.Default.PlayArrow,
                             null,
-                            tint = textSecondary,
-                            modifier = Modifier.size(60.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
                         )
                     }
                 }
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Video name
+                Text(
+                    text = video.name,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Folder name
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = primaryColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = video.folderName,
+                        fontSize = 13.sp,
+                        color = textSecondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Details card with glass styling
                 Box(
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.Black.copy(0.6f)),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .glassCard(cornerRadius = 16.dp)
+                        .padding(16.dp)
                 ) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        null,
-                        tint = Color.White,
-                        modifier = Modifier.size(30.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = video.name,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = textPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    Icons.Default.Folder,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = video.folderName,
-                    fontSize = 13.sp,
-                    color = textSecondary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFF0F0F0)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    DetailRow(
-                        icon = Icons.Default.Timer,
-                        label = stringResource(R.string.duration),
-                        value = viewModel.formatDuration(video.duration),
-                        iconColor = MaterialTheme.colorScheme.primary
-                    )
-                    DetailRow(
-                        icon = Icons.Default.Storage,
-                        label = stringResource(R.string.size),
-                        value = viewModel.formatSize(video.size),
-                        iconColor = MaterialTheme.colorScheme.primary
-                    )
-                    DetailRow(
-                        icon = Icons.Default.DateRange,
-                        label = stringResource(R.string.date_added),
-                        value = formatDate(video.dateAdded),
-                        iconColor = MaterialTheme.colorScheme.primary
-                    )
-                    DetailRow(
-                        icon = Icons.Default.Folder,
-                        label = stringResource(R.string.location),
-                        value = video.folderPath,
-                        iconColor = MaterialTheme.colorScheme.primary,
-                        isPath = true
-                    )
-                    DetailRow(
-                        icon = Icons.Default.Description,
-                        label = stringResource(R.string.file_name),
-                        value = File(video.path).name,
-                        iconColor = MaterialTheme.colorScheme.primary,
-                        isPath = true
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Button(
-                    onClick = {
-                        onDismiss()
-                        onPlay()
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.play), fontSize = 14.sp, color = Color.White)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        DetailRow(
+                            icon = Icons.Default.Timer,
+                            label = stringResource(R.string.duration),
+                            value = viewModel.formatDuration(video.duration),
+                            iconColor = primaryColor
+                        )
+                        DetailRow(
+                            icon = Icons.Default.Storage,
+                            label = stringResource(R.string.size),
+                            value = viewModel.formatSize(video.size),
+                            iconColor = primaryColor
+                        )
+                        DetailRow(
+                            icon = Icons.Default.DateRange,
+                            label = stringResource(R.string.date_added),
+                            value = formatDate(video.dateAdded),
+                            iconColor = primaryColor
+                        )
+                        DetailRow(
+                            icon = Icons.Default.Folder,
+                            label = stringResource(R.string.location),
+                            value = video.folderPath,
+                            iconColor = primaryColor,
+                            isPath = true
+                        )
+                        DetailRow(
+                            icon = Icons.Default.Description,
+                            label = stringResource(R.string.file_name),
+                            value = File(video.path).name,
+                            iconColor = primaryColor,
+                            isPath = true
+                        )
+                    }
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        val shareIntent = android.content.Intent().apply {
-                            action = android.content.Intent.ACTION_SEND
-                            putExtra(android.content.Intent.EXTRA_STREAM, video.uri)
-                            type = "video/*"
-                        }
-                        context.startActivity(
-                            android.content.Intent.createChooser(
-                                shareIntent, "Share Video"
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onPlay()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryColor
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.play), fontSize = 14.sp, color = Color.White)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val shareIntent = android.content.Intent().apply {
+                                action = android.content.Intent.ACTION_SEND
+                                putExtra(android.content.Intent.EXTRA_STREAM, video.uri)
+                                type = "video/*"
+                            }
+                            context.startActivity(
+                                android.content.Intent.createChooser(shareIntent, "Share Video")
+                            )
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = textPrimary
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(
+                                listOf(
+                                    if (isDark) Color.White.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.2f),
+                                    Color.Transparent
+                                )
                             )
                         )
-                        onDismiss()
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Share,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.share), fontSize = 14.sp)
+                    ) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.share), fontSize = 14.sp)
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
+    }
+}
+
+@Composable
+fun DetailRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    iconColor: Color,
+    isPath: Boolean = false
+) {
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = textSecondary
+            )
+        }
+
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            color = textPrimary,
+            maxLines = if (isPath) 2 else 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(0.6f)
+                .padding(start = 8.dp)
+        )
     }
 }
 
@@ -1464,7 +1543,6 @@ fun GlassFolderGridItem(
     folder: VideoFolder, viewModel: VideoViewModel, onClick: () -> Unit
 ) {
     val thumbUri = folder.videos.firstOrNull()?.thumbnailUri
-    val textPrimary = GlassTokens.getTextPrimary()
     val textSecondary = GlassTokens.getTextSecondary()
 
     Box(
@@ -1689,7 +1767,7 @@ fun GlassFolderItem(folder: VideoFolder, viewModel: VideoViewModel, onClick: () 
 }
 
 @Composable
-fun GlassEmptyState(message: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+fun GlassEmptyState(message: String, icon: ImageVector) {
     val textSecondary = GlassTokens.getTextSecondary()
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2152,190 +2230,6 @@ fun ResumeFab(
     }
 }
 
-@Composable
-fun StatChip(value: String, label: String) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        Text(
-            value,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            label,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 1.sp
-        )
-    }
-}
-
-@Composable
-fun FolderGridView(
-    folders: List<VideoFolder>,
-    viewModel: VideoViewModel,
-    onFolderClick: (VideoFolder) -> Unit,
-    innerPadding: PaddingValues = PaddingValues()
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 6.dp,
-            bottom = 6.dp + innerPadding.calculateBottomPadding() + 80.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(folders, key = { it.path }) { folder ->
-            FolderGridItem(folder, viewModel) { onFolderClick(folder) }
-        }
-    }
-}
-
-@Composable
-fun FolderGridItem(
-    folder: VideoFolder, viewModel: VideoViewModel, onClick: () -> Unit
-) {
-    val thumbUri = folder.videos.firstOrNull()?.thumbnailUri
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.88f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable { onClick() }) {
-        if (thumbUri != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(thumbUri).crossfade(true)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(if (thumbUri != null) 0.15f else 0f),
-                            Color.Black.copy(0.88f)
-                        )
-                    )
-                )
-        )
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(10.dp)
-                .size(30.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Folder,
-                null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(10.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color.Black.copy(0.55f))
-                .padding(horizontal = 7.dp, vertical = 4.dp)
-        ) {
-            Text(
-                "${folder.videoCount}",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(12.dp)
-        ) {
-            Text(
-                text = folder.name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                viewModel.formatSize(folder.totalSize),
-                fontSize = 11.sp,
-                color = Color.White.copy(0.55f)
-            )
-        }
-    }
-}
-
-@Composable
-fun DetailRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    value: String,
-    iconColor: Color,
-    isPath: Boolean = false
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp)
-            )
-            Text(
-                text = label,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Text(
-            text = value,
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = if (isPath) 2 else 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(0.6f)
-                .padding(start = 8.dp)
-        )
-    }
-}
-
 fun formatDate(timestamp: Long): String {
     val date = Date(timestamp)
     val format = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault())
@@ -2449,6 +2343,10 @@ fun PermissionDialog(onDismiss: () -> Unit, onAllow: () -> Unit) {
         shape = RoundedCornerShape(20.dp)
     )
 }
+
+
+
+
 
 
 
