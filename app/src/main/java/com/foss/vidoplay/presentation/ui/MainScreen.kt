@@ -5,7 +5,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +40,7 @@ import com.foss.vidoplay.MainRoutes
 import com.foss.vidoplay.NavItem
 import com.foss.vidoplay.R
 import com.foss.vidoplay.domain.model.VideoFolder
+import com.foss.vidoplay.presentation.common.glassPanel
 import com.foss.vidoplay.presentation.viewModel.ExoPlayerViewModel
 import com.foss.vidoplay.presentation.viewModel.LastPlayedViewModel
 import com.foss.vidoplay.presentation.viewModel.VideoViewModel
@@ -59,21 +62,20 @@ fun MainScreen(
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.background,
-                contentColor = MaterialTheme.colorScheme.onBackground,
+            Box(
                 modifier = Modifier
-                    .padding(horizontal = 12.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-            )
-            {
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .glassPanel(cornerRadius = 24.dp)   // Glass effect
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    navList.forEachIndexed { _, navItem ->
+                    navList.forEach { navItem ->
                         val isSelected = when (backStack1.last()) {
                             MainRoutes.File -> navItem.title == "File"
                             MainRoutes.Search -> navItem.title == "Search"
@@ -86,32 +88,33 @@ fun MainScreen(
                             animationSpec = tween(durationMillis = 200),
                             label = "iconScale"
                         )
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = {
-                                val target = when (navItem.title) {
-                                    "File" -> MainRoutes.File
-                                    "Search" -> MainRoutes.Search
-                                    "Playlists" -> MainRoutes.Playlists
-                                    "Settings" -> MainRoutes.Settings
-                                    else -> MainRoutes.File
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    val target = when (navItem.title) {
+                                        "File" -> MainRoutes.File
+                                        "Search" -> MainRoutes.Search
+                                        "Playlists" -> MainRoutes.Playlists
+                                        "Settings" -> MainRoutes.Settings
+                                        else -> MainRoutes.File
+                                    }
+                                    if (backStack1.last() != target) {
+                                        backStack1.clear()
+                                        backStack1.add(target)
+                                    }
                                 }
-                                if (backStack1.last() != target) {
-                                    backStack1.clear()
-                                    backStack1.add(target)
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(navItem.icon),
-                                    contentDescription = navItem.title,
-                                    modifier = Modifier.size(24.dp).scale(iconScale),
-                                    tint = if (isSelected) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                                )
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(navItem.icon),
+                                contentDescription = navItem.title,
+                                modifier = Modifier.size(24.dp).scale(iconScale),
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                            )
+                        }
                     }
                 }
             }
