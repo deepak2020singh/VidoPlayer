@@ -32,27 +32,23 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -69,17 +65,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.foss.vidoplay.domain.model.Playlist
 import com.foss.vidoplay.domain.model.PlaylistVideo
 import com.foss.vidoplay.presentation.common.GlassTokens
 import com.foss.vidoplay.presentation.common.formatDuration
+import com.foss.vidoplay.presentation.common.glassCard
+import com.foss.vidoplay.presentation.common.glassPanel
 import com.foss.vidoplay.presentation.viewModel.PlaylistViewModel
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.context.stopKoin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,8 +93,12 @@ fun PlaylistsScreen(
     var playlistToEdit by remember { mutableStateOf<Playlist?>(null) }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val isDark = GlassTokens.isDarkTheme()
 
+    // Dynamic theme values
+    val isDark = GlassTokens.isDarkTheme()
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+    val primaryColor = MaterialTheme.colorScheme.primary
 
     LaunchedEffect(state.successMessage, state.error) {
         val msg = state.successMessage ?: state.error
@@ -145,13 +148,14 @@ fun PlaylistsScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showCreateDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
+                containerColor = primaryColor,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Create playlist")
             }
-        }
+        },
+        containerColor = Color.Transparent
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -159,46 +163,62 @@ fun PlaylistsScreen(
                 .background(if (isDark) Color(0xFF0A0A0A) else Color(0xFFF5F5F5))
                 .padding(paddingValues)
         ) {
-            SecondaryTabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
+            // Glass tab row
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .glassPanel(cornerRadius = 16.dp)
             ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Outlined.QueueMusic,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text("My Playlists (${state.playlists.size})")
+                SecondaryTabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.Transparent,
+                    contentColor = textPrimary
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.QueueMusic,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = if (selectedTab == 0) primaryColor else textSecondary
+                                )
+                                Text(
+                                    "My Playlists (${state.playlists.size})",
+                                    color = if (selectedTab == 0) primaryColor else textSecondary
+                                )
+                            }
                         }
-                    }
-                )
+                    )
 
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                Icons.Outlined.FavoriteBorder,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text("Recent")
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.FavoriteBorder,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = if (selectedTab == 1) primaryColor else textSecondary
+                                )
+                                Text(
+                                    "Recent",
+                                    color = if (selectedTab == 1) primaryColor else textSecondary
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -208,7 +228,7 @@ fun PlaylistsScreen(
                     if (state.isLoading) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary,
+                                color = primaryColor,
                                 strokeWidth = 3.dp,
                                 modifier = Modifier.size(48.dp)
                             )
@@ -217,7 +237,7 @@ fun PlaylistsScreen(
                         EmptyPlaylistsState(onCreateClick = { showCreateDialog = true })
                     } else {
                         LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(state.playlists, key = { it.id }) { playlist ->
@@ -244,7 +264,7 @@ fun PlaylistsScreen(
         }
     }
 
-    // Dialogs and Bottom Sheet (unchanged)
+    // Dialogs and Bottom Sheet
     if (showCreateDialog) {
         PlaylistDialog(
             playlist = null,
@@ -278,8 +298,8 @@ fun PlaylistsScreen(
                     modifier = Modifier.size(32.dp)
                 )
             },
-            title = { Text("Delete Playlist", fontWeight = FontWeight.Bold) },
-            text = { Text("Delete \"${playlist.name}\"? This cannot be undone.") },
+            title = { Text("Delete Playlist", fontWeight = FontWeight.Bold, color = textPrimary) },
+            text = { Text("Delete \"${playlist.name}\"? This cannot be undone.", color = textSecondary) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -291,7 +311,9 @@ fun PlaylistsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { playlistToDelete = null }) { Text("Cancel") }
-            }
+            },
+            containerColor = if (isDark) Color(0xFF1E2024) else Color(0xFFF8F9FA),
+            shape = RoundedCornerShape(20.dp)
         )
     }
 
@@ -316,37 +338,38 @@ fun PlaylistCard(
     onDeleteClick: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+    val primaryColor = MaterialTheme.colorScheme.primary
 
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            .glassCard(cornerRadius = 16.dp)
+            .clickable { onClick() }
+            .padding(12.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(60.dp)
                     .clip(RoundedCornerShape(12.dp)),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                color = primaryColor.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.AutoMirrored.Outlined.QueueMusic,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(32.dp)
+                        tint = primaryColor,
+                        modifier = Modifier.size(30.dp)
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -357,13 +380,13 @@ fun PlaylistCard(
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = textPrimary
                 )
                 if (playlist.description.isNotBlank()) {
                     Text(
                         text = playlist.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -371,7 +394,7 @@ fun PlaylistCard(
                 Text(
                     text = "${playlist.videoCount} videos",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = textSecondary
                 )
             }
             Box {
@@ -381,40 +404,37 @@ fun PlaylistCard(
                         .size(40.dp)
                         .clip(CircleShape)
                 ) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(
+                        Icons.Outlined.MoreVert,
+                        contentDescription = "More",
+                        tint = textSecondary
+                    )
                 }
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    containerColor = MaterialTheme.colorScheme.surface
+                    modifier = Modifier.glassPanel(cornerRadius = 12.dp)
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Open") },
+                        text = { Text("Open", color = textPrimary) },
                         onClick = { showMenu = false; onClick() },
-                        leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.primary) }
+                        leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = primaryColor) }
                     )
                     DropdownMenuItem(
-                        text = { Text("Edit") },
+                        text = { Text("Edit", color = textPrimary) },
                         onClick = { showMenu = false; onEditClick() },
-                        leadingIcon = { Icon(Icons.Default.Edit, null) }
+                        leadingIcon = { Icon(Icons.Default.Edit, null, tint = textSecondary) }
                     )
                     DropdownMenuItem(
-                        text = { Text("Delete") },
+                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                         onClick = { showMenu = false; onDeleteClick() },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Delete,
-                                null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
                     )
                 }
             }
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -425,79 +445,90 @@ fun PlaylistDetailSheet(
     onRemoveVideo: (Long) -> Unit,
     onPlayVideo: (PlaylistVideo) -> Unit
 ) {
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+    val isDark = GlassTokens.isDarkTheme()
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        containerColor = Color.Transparent,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = null
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .glassPanel(cornerRadius = 24.dp)
                 .padding(16.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    playlist.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            if (playlist.description.isNotBlank()) {
-                Text(
-                    playlist.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-
-            Text(
-                "${videos.size} videos",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (videos.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp),
-                    contentAlignment = Alignment.Center
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "No videos in this playlist",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        playlist.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimary
                     )
-                }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.heightIn(max = 400.dp)
-                ) {
-                    items(videos, key = { it.id }) { video ->
-                        PlaylistVideoItem(
-                            video = video,
-                            onPlay = { onPlayVideo(video) },
-                            onRemove = { onRemoveVideo(video.videoId) }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = textSecondary
                         )
                     }
                 }
+
+                if (playlist.description.isNotBlank()) {
+                    Text(
+                        playlist.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = textSecondary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                Text(
+                    "${videos.size} videos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = textSecondary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (videos.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No videos in this playlist",
+                            color = textSecondary
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.heightIn(max = 400.dp)
+                    ) {
+                        items(videos, key = { it.id }) { video ->
+                            PlaylistVideoItem(
+                                video = video,
+                                onPlay = { onPlayVideo(video) },
+                                onRemove = { onRemoveVideo(video.videoId) }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(32.dp))
             }
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
-
 
 @Composable
 fun PlaylistVideoItem(
@@ -505,31 +536,33 @@ fun PlaylistVideoItem(
     onPlay: () -> Unit,
     onRemove: () -> Unit
 ) {
-    Surface(
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onPlay() },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            .glassCard(cornerRadius = 12.dp)
+            .clickable { onPlay() }
+            .padding(10.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(8.dp)),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                color = primaryColor.copy(alpha = 0.12f)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.Default.PlayArrow,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        tint = primaryColor,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
@@ -541,12 +574,12 @@ fun PlaylistVideoItem(
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = textPrimary
                 )
                 Text(
                     text = formatDuration(video.videoDuration),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = textSecondary
                 )
             }
             IconButton(onClick = onRemove) {
@@ -561,23 +594,25 @@ fun PlaylistVideoItem(
     }
 }
 
-
 @Composable
 fun RecentVideosSection(
     recentVideos: List<PlaylistVideo>,
     onVideoClick: (PlaylistVideo) -> Unit
 ) {
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
             "Recently Added",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = textPrimary
         )
         if (recentVideos.isEmpty()) {
             Box(
@@ -586,7 +621,7 @@ fun RecentVideosSection(
                     .padding(vertical = 32.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No recent videos", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No recent videos", color = textSecondary)
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -604,6 +639,10 @@ fun RecentVideosSection(
 
 @Composable
 fun EmptyPlaylistsState(onCreateClick: () -> Unit) {
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+    val primaryColor = MaterialTheme.colorScheme.primary
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -614,13 +653,13 @@ fun EmptyPlaylistsState(onCreateClick: () -> Unit) {
         Surface(
             modifier = Modifier.size(120.dp),
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+            color = primaryColor.copy(alpha = 0.1f)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     Icons.AutoMirrored.Outlined.QueueMusic,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = primaryColor,
                     modifier = Modifier.size(48.dp)
                 )
             }
@@ -630,20 +669,20 @@ fun EmptyPlaylistsState(onCreateClick: () -> Unit) {
             "No Playlists Yet",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = textPrimary
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "Create your first playlist to organize your videos",
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = textSecondary,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = onCreateClick,
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
         ) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
@@ -661,6 +700,11 @@ fun PlaylistDialog(
 ) {
     var name by remember { mutableStateOf(playlist?.name ?: "") }
     var description by remember { mutableStateOf(playlist?.description ?: "") }
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val isDark = GlassTokens.isDarkTheme()
+    val chipBg = GlassTokens.getChipBg()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -668,14 +712,15 @@ fun PlaylistDialog(
             Icon(
                 if (playlist == null) Icons.Default.CreateNewFolder else Icons.Default.Edit,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = primaryColor,
                 modifier = Modifier.size(32.dp)
             )
         },
         title = {
             Text(
                 if (playlist == null) "Create Playlist" else "Edit Playlist",
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = textPrimary
             )
         },
         text = {
@@ -683,18 +728,32 @@ fun PlaylistDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Playlist Name") },
+                    label = { Text("Playlist Name", color = textSecondary) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
+                        focusedBorderColor = primaryColor,
+                        unfocusedBorderColor = chipBg,
+                        cursorColor = primaryColor
+                    )
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description (optional)") },
+                    label = { Text("Description (optional)", color = textSecondary) },
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
+                        focusedBorderColor = primaryColor,
+                        unfocusedBorderColor = chipBg,
+                        cursorColor = primaryColor
+                    )
                 )
             }
         },
@@ -702,14 +761,18 @@ fun PlaylistDialog(
             Button(
                 onClick = { if (name.isNotBlank()) onConfirm(name, description) },
                 enabled = name.isNotBlank(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
             ) {
                 Text(if (playlist == null) "Create" else "Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = textSecondary)
+            }
         },
+        containerColor = if (isDark) Color(0xFF1E2024) else Color(0xFFF8F9FA),
         shape = RoundedCornerShape(20.dp)
     )
 }
