@@ -65,7 +65,7 @@ fun MainScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                   .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .glassPanel(cornerRadius = 24.dp)   // Glass effect
                     .padding(horizontal = 8.dp, vertical = 4.dp)
