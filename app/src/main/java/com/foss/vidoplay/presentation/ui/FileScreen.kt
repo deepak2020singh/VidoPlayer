@@ -1,12 +1,13 @@
 package com.foss.vidoplay.presentation.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -17,6 +18,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -46,20 +49,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.outlined.QueueMusic
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
@@ -81,6 +83,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -118,6 +121,7 @@ import com.foss.vidoplay.domain.model.VideoFolder
 import com.foss.vidoplay.presentation.common.GlassTokens
 import com.foss.vidoplay.presentation.common.SortOption
 import com.foss.vidoplay.presentation.common.ViewMode
+import com.foss.vidoplay.presentation.common.formatDate
 import com.foss.vidoplay.presentation.common.formatDuration
 import com.foss.vidoplay.presentation.common.glassCard
 import com.foss.vidoplay.presentation.common.glassChip
@@ -126,12 +130,8 @@ import com.foss.vidoplay.presentation.viewModel.LastPlayedViewModel
 import com.foss.vidoplay.presentation.viewModel.PlaylistViewModel
 import com.foss.vidoplay.presentation.viewModel.ThemeViewModel
 import com.foss.vidoplay.presentation.viewModel.VideoViewModel
-import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -145,26 +145,27 @@ fun FileScreen(
 ) {
     val textSecondary = GlassTokens.getTextSecondary()
     val isDark = GlassTokens.isDarkTheme()
-
-    LaunchedEffect(Unit) {
-        Log.d("FileScreen", "VideoFolders size: ${viewModel.videoFolders.value.size}")
-        Log.d("FileScreen", "AllVideos size: ${viewModel.allVideos.value.size}")
-    }
-
     val context = LocalContext.current
+
     var showPermissionDialog by remember { mutableStateOf(false) }
     var showAllVideos by remember { mutableStateOf(false) }
-    var isRefreshing by remember { mutableStateOf(false) }
     var sortOption by remember { mutableStateOf(SortOption.DATE_ADDED_DESC) }
     var showSortMenu by remember { mutableStateOf(false) }
+
+    // ── This is the ONLY refresh state — drives PullToRefreshBox ─────────────
+    var isRefreshing by remember { mutableStateOf(false) }
 
     val videoFolders by viewModel.videoFolders.collectAsState()
     val allVideos by viewModel.allVideos.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedFolder by viewModel.selectedFolder.collectAsState()
     val error by viewModel.error.collectAsState()
-
     val resumableVideo by lastPlayedViewModel.resumableVideo.collectAsState()
+
+    // Auto-stop spinner when ViewModel finishes
+    LaunchedEffect(isLoading) {
+        if (!isLoading) isRefreshing = false
+    }
 
     val sortedVideos = remember(allVideos, sortOption) {
         when (sortOption) {
@@ -181,28 +182,23 @@ fun FileScreen(
 
     var hasPermission by remember {
         mutableStateOf(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) ContextCompat.checkSelfPermission(
-                context, Manifest.permission.READ_MEDIA_VIDEO
-            ) == PackageManager.PERMISSION_GRANTED
-            else ContextCompat.checkSelfPermission(
-                context, Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+            else
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         )
     }
 
-    val permissionLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            hasPermission = granted
-            showPermissionDialog = false
-            if (granted) {
-                viewModel.loadVideos()
-            }
-        }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPermission = granted
+        showPermissionDialog = false
+        if (granted) viewModel.loadVideos()
+    }
 
     LaunchedEffect(hasPermission) {
-        if (hasPermission && videoFolders.isEmpty() && !isLoading) {
-            viewModel.loadVideos()
-        }
+        if (hasPermission && videoFolders.isEmpty() && !isLoading) viewModel.loadVideos()
     }
 
     LaunchedEffect(error) {
@@ -212,18 +208,49 @@ fun FileScreen(
         }
     }
 
-    val handleRefresh = {
-        if (!isRefreshing) {
-            isRefreshing = true
-            viewModel.refreshVideos()
-            Toast.makeText(context, "Refreshing videos...", Toast.LENGTH_SHORT).show()
-            kotlinx.coroutines.MainScope().launch {
-                kotlinx.coroutines.delay(2000)
-                isRefreshing = false
+    var videoToRename by remember { mutableStateOf<VideoFile?>(null) }
+    var videoToDelete by remember { mutableStateOf<VideoFile?>(null) }
+    var pendingRenameVideo by remember { mutableStateOf<VideoFile?>(null) }
+    var pendingNewName by remember { mutableStateOf("") }
+
+    val renameLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val video = pendingRenameVideo
+            val name = pendingNewName
+            if (video != null && name.isNotBlank()) {
+                viewModel.renameVideo(video, name)
+                Toast.makeText(context, "Video renamed successfully", Toast.LENGTH_SHORT).show()
             }
+        } else {
+            Toast.makeText(context, "Rename permission denied", Toast.LENGTH_SHORT).show()
         }
+        pendingRenameVideo = null
+        pendingNewName = ""
     }
 
+    fun performRename(video: VideoFile, newName: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val pi = viewModel.getWritePendingIntent(context, video)
+            if (pi != null) {
+                pendingRenameVideo = video
+                pendingNewName = newName
+                try {
+                    renameLauncher.launch(
+                        IntentSenderRequest.Builder(pi.intentSender).build()
+                    )
+                } catch (e: Exception) {
+                    viewModel.renameVideo(video, newName)
+                }
+            } else {
+                viewModel.renameVideo(video, newName)
+            }
+        } else {
+            viewModel.renameVideo(video, newName)
+            Toast.makeText(context, "Video renamed", Toast.LENGTH_SHORT).show()
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -232,127 +259,137 @@ fun FileScreen(
         if (!hasPermission) {
             PermissionRequestScreen { showPermissionDialog = true }
         } else {
-            Column(modifier = Modifier.fillMaxSize()) {
-                FileTopBar(
-                    innerPadding = innerPadding,
-                    onSearch = onNavigateToSearch,
-                    onAllVideosClick = { showAllVideos = true },
-                    onRefresh = handleRefresh,
-                    isRefreshing = isRefreshing || isLoading,
-                    showBack = selectedFolder != null || showAllVideos,
-                    folderName = when {
-                        showAllVideos -> "All Videos"
-                        selectedFolder != null -> selectedFolder?.name
-                        else -> null
-                    },
-                    onBack = {
-                        if (showAllVideos) {
-                            showAllVideos = false
-                        } else {
-                            viewModel.selectFolder(null)
+            // ── PullToRefreshBox — no rememberPullToRefreshState() needed ────
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = {
+                    isRefreshing = true
+                    viewModel.refreshVideos()
+                },
+                modifier = Modifier.fillMaxSize()
+                // No custom indicator needed — default M3 spinner works perfectly
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    FileTopBar(
+                        innerPadding = innerPadding,
+                        onSearch = onNavigateToSearch,
+                        onAllVideosClick = { showAllVideos = true },
+                        showBack = selectedFolder != null || showAllVideos,
+                        folderName = when {
+                            showAllVideos -> "All Videos"
+                            selectedFolder != null -> selectedFolder?.name
+                            else -> null
+                        },
+                        onBack = {
+                            if (showAllVideos) showAllVideos = false
+                            else viewModel.selectFolder(null)
                         }
-                    })
+                    )
 
-                AnimatedContent(
-                    targetState = Triple(isLoading, showAllVideos, selectedFolder),
-                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
-                    label = "content"
-                ) { (loading, showAll, folder) ->
-                    when {
-                        loading -> {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    AnimatedContent(
+                        targetState = Triple(isLoading, showAllVideos, selectedFolder),
+                        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+                        label = "content"
+                    ) { (loading, showAll, folder) ->
+                        when {
+                            loading -> {
+                                Box(
+                                    Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    CircularProgressIndicator(
-                                        color = MaterialTheme.colorScheme.primary,
-                                        strokeWidth = 3.dp,
-                                        modifier = Modifier.size(48.dp)
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.loading_videos),
-                                        fontSize = 14.sp,
-                                        color = textSecondary
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.please_wait_scan),
-                                        fontSize = 12.sp,
-                                        color = textSecondary.copy(alpha = 0.7f)
-                                    )
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            strokeWidth = 3.dp,
+                                            modifier = Modifier.size(48.dp)
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.loading_videos),
+                                            fontSize = 14.sp,
+                                            color = textSecondary
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.please_wait_scan),
+                                            fontSize = 12.sp,
+                                            color = textSecondary.copy(alpha = 0.7f)
+                                        )
+                                    }
                                 }
                             }
-                        }
 
-                        showAll -> {
-                            AllVideosContent(
-                                videos = sortedVideos,
-                                viewModel = viewModel,
-                                lastPlayedViewModel = lastPlayedViewModel,
-                                sortOption = sortOption,
-                                onSortChange = { sortOption = it },
-                                showSortMenu = showSortMenu,
-                                onSortMenuChange = { showSortMenu = it },
-                                onVideoClick = { video, position ->
-                                    onVideoClick(video, sortedVideos, position)
-                                },
-                                innerPadding = innerPadding
-                            )
-                        }
+                            showAll -> {
+                                AllVideosContent(
+                                    videos = sortedVideos,
+                                    viewModel = viewModel,
+                                    lastPlayedViewModel = lastPlayedViewModel,
+                                    sortOption = sortOption,
+                                    onSortChange = { sortOption = it },
+                                    showSortMenu = showSortMenu,
+                                    onSortMenuChange = { showSortMenu = it },
+                                    onVideoClick = { video, position ->
+                                        onVideoClick(video, sortedVideos, position)
+                                    },
+                                    onRename = { videoToRename = it },
+                                    onDelete = { videoToDelete = it },
+                                    innerPadding = innerPadding
+                                )
+                            }
 
-                        folder != null -> {
-                            GlassVideoListContent(
-                                lastPlayedViewModel = lastPlayedViewModel,
-                                videos = folder.videos,
-                                viewModel = viewModel,
-                                resumableVideo = resumableVideo,
-                                onVideoClick = { video, position ->
-                                    onVideoClick(video, folder.videos, position)
-                                },
-                                innerPadding = innerPadding
-                            )
-                        }
+                            folder != null -> {
+                                GlassVideoListContent(
+                                    lastPlayedViewModel = lastPlayedViewModel,
+                                    videos = folder.videos,
+                                    viewModel = viewModel,
+                                    resumableVideo = resumableVideo,
+                                    onVideoClick = { video, position ->
+                                        onVideoClick(video, folder.videos, position)
+                                    },
+                                    innerPadding = innerPadding,
+                                    onRename = { videoToRename = it },
+                                    onDelete = { videoToDelete = it }
+                                )
+                            }
 
-                        else -> {
-                            GlassFolderListContent(
-                                folders = videoFolders,
-                                viewModel = viewModel,
-                                onFolderClick = onFolderClick,
-                                innerPadding = innerPadding
-                            )
+                            else -> {
+                                GlassFolderListContent(
+                                    folders = videoFolders,
+                                    viewModel = viewModel,
+                                    onFolderClick = onFolderClick,
+                                    innerPadding = innerPadding
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Resume FAB
+        // ── Resume FAB ────────────────────────────────────────────────────────
         AnimatedVisibility(
             visible = resumableVideo != null && hasPermission && !isLoading
                     && !showAllVideos && selectedFolder == null,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = innerPadding.calculateBottomPadding() + 16.dp, end = 20.dp),
-            enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.85f, animationSpec = spring(
-                Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium
-            )),
+            enter = fadeIn(tween(300)) + scaleIn(
+                initialScale = 0.85f,
+                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium)
+            ),
             exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.85f)
         ) {
             resumableVideo?.let { info ->
                 ResumeFab(
                     info = info,
                     onResume = {
-                        Log.d("FileScreen", "Resume clicked for video: ${info.videoName}")
                         val folder = viewModel.videoFolders.value
                             .firstOrNull { it.path == info.folderPath }
                         val video = folder?.videos?.firstOrNull { it.id == info.videoId }
                             ?: viewModel.allVideos.value.firstOrNull { it.id == info.videoId }
                         if (video != null && File(video.path).exists()) {
-                            val playlist = folder?.videos ?: listOf(video)
-                            onVideoClick(video, playlist, info.position)
+                            onVideoClick(video, folder?.videos ?: listOf(video), info.position)
                         } else {
                             Toast.makeText(context, "Video not found", Toast.LENGTH_SHORT).show()
                             lastPlayedViewModel.clear()
@@ -364,23 +401,68 @@ fun FileScreen(
         }
     }
 
+    // ── Rename Dialog ─────────────────────────────────────────────────────────
+    videoToRename?.let { video ->
+        RenameVideoDialog(
+            video = video,
+            onDismiss = { videoToRename = null },
+            onConfirm = { newName ->
+                videoToRename = null
+                performRename(video, newName)
+            }
+        )
+    }
+
+    // ── Delete Dialog ─────────────────────────────────────────────────────────
+    videoToDelete?.let { video ->
+        AlertDialog(
+            onDismissRequest = { videoToDelete = null },
+            icon = {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = { Text("Delete Video", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Are you sure you want to delete \"${video.name}\"?",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { videoToDelete = null; viewModel.deleteVideo(video) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { videoToDelete = null }) { Text("Cancel") }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
     if (showPermissionDialog) {
         PermissionDialog(onDismiss = { showPermissionDialog = false }, onAllow = {
-            val perm =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_VIDEO
-                else Manifest.permission.READ_EXTERNAL_STORAGE
+            val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                Manifest.permission.READ_MEDIA_VIDEO
+            else Manifest.permission.READ_EXTERNAL_STORAGE
             permissionLauncher.launch(perm)
         })
     }
 }
+
 
 @Composable
 private fun FileTopBar(
     innerPadding: PaddingValues,
     onSearch: () -> Unit,
     onAllVideosClick: () -> Unit,
-    onRefresh: () -> Unit,
-    isRefreshing: Boolean,
     showBack: Boolean,
     folderName: String?,
     onBack: () -> Unit
@@ -396,9 +478,7 @@ private fun FileTopBar(
                 Brush.verticalGradient(
                     listOf(
                         if (isDark) Color(0xFF0A0A0A) else Color(0xFFF5F5F5),
-                        if (isDark) Color(0xFF0A0A0A).copy(alpha = 0.95f) else Color(0xFFF5F5F5).copy(
-                            alpha = 0.95f
-                        ),
+                        if (isDark) Color(0xFF0A0A0A).copy(alpha = 0.95f) else Color(0xFFF5F5F5).copy(alpha = 0.95f),
                         Color.Transparent
                     )
                 )
@@ -415,7 +495,11 @@ private fun FileTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                AnimatedVisibility(visible = showBack) {
+                AnimatedVisibility(
+                    visible = showBack,
+                    enter = slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300)) + fadeIn(tween(300)),
+                    exit = slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut(tween(300))
+                ) {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
@@ -433,57 +517,43 @@ private fun FileTopBar(
                     }
                 }
 
-                Column {
-                    if (!showBack) {
+                AnimatedContent(
+                    targetState = showBack,
+                    transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
+                    label = "title"
+                ) { isBackVisible ->
+                    Column {
+                        if (!isBackVisible) {
+                            Text(
+                                text = stringResource(R.string.vidoPlay),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 3.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                         Text(
-                            text = stringResource(R.string.vidoPlay),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 3.sp,
-                            color = MaterialTheme.colorScheme.primary
+                            text = if (isBackVisible) folderName ?: stringResource(R.string.folder)
+                            else stringResource(R.string.my_library),
+                            fontSize = if (isBackVisible) 18.sp else 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textPrimary,
+                            letterSpacing = (-0.4).sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Text(
-                        text = if (showBack) folderName ?: stringResource(R.string.folder) else stringResource(R.string.my_library),
-                        fontSize = if (showBack) 18.sp else 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textPrimary,
-                        letterSpacing = (-0.4).sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
             }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Refresh button
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .glassChip()
-                        .clickable(enabled = !isRefreshing) { onRefresh() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isRefreshing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.refresh),
-                            tint = textSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // ← Refresh button REMOVED entirely
 
-                if (!showBack) {
+                AnimatedVisibility(
+                    visible = !showBack,
+                    enter = fadeIn(tween(300)) + slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)),
+                    exit = fadeOut(tween(300)) + slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
+                ) {
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -541,24 +611,15 @@ fun AllVideosContent(
     showSortMenu: Boolean,
     onSortMenuChange: (Boolean) -> Unit,
     onVideoClick: (VideoFile, Long) -> Unit,
+    onRename: (VideoFile) -> Unit,
+    onDelete: (VideoFile) -> Unit,
     innerPadding: PaddingValues = PaddingValues(),
     themeViewModel: ThemeViewModel = koinViewModel()
 ) {
     val textPrimary = GlassTokens.getTextPrimary()
     val textSecondary = GlassTokens.getTextSecondary()
-    val savedViewMode by themeViewModel.themePreferences.collectAsState()
-    var viewMode by remember { mutableStateOf(savedViewMode.viewMode) }
-    var showViewMenu by remember { mutableStateOf(false) }
-
-    LaunchedEffect(savedViewMode.viewMode) {
-        viewMode = savedViewMode.viewMode
-    }
-
-    LaunchedEffect(viewMode) {
-        if (viewMode != savedViewMode.viewMode) {
-            themeViewModel.setVideoViewMode(viewMode)
-        }
-    }
+    val themePrefs by themeViewModel.themePreferences.collectAsState()
+    val viewMode = themePrefs.videoViewMode   // 👈 global preference
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -573,123 +634,61 @@ fun AllVideosContent(
                 GlassStatChip(viewModel.formatSize(videos.sumOf { it.size }), stringResource(R.string.total_size))
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Sort button
-                Box {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .glassChip()
-                            .clickable { onSortMenuChange(true) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Sort",
-                            tint = textSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showSortMenu,
-                        onDismissRequest = { onSortMenuChange(false) },
-                        containerColor = if (GlassTokens.isDarkTheme()) Color(0xFF1E1E1E) else Color(0xFFFFFFFF),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        SortOption.entries.forEach { option ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        option.displayName,
-                                        color = if (sortOption == option) MaterialTheme.colorScheme.primary else textPrimary,
-                                        fontSize = 13.sp
-                                    )
-                                },
-                                onClick = {
-                                    onSortChange(option)
-                                    onSortMenuChange(false)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        option.icon,
-                                        contentDescription = null,
-                                        tint = if (sortOption == option) MaterialTheme.colorScheme.primary else textSecondary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                },
-                                trailingIcon = {
-                                    if (sortOption == option) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                    }
+            Box {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .glassChip()
+                        .clickable { onSortMenuChange(true) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "Sort",
+                        tint = textSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
 
-                // View mode button
-                Box {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .glassChip()
-                            .clickable { showViewMenu = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (viewMode == ViewMode.GRID) Icons.Default.GridView
-                            else Icons.AutoMirrored.Filled.ViewList,
-                            contentDescription = "Toggle view",
-                            tint = textSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showViewMenu,
-                        onDismissRequest = { showViewMenu = false },
-                        containerColor = if (GlassTokens.isDarkTheme()) Color(0xFF1E1E1E) else Color(0xFFFFFFFF),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        listOf(
-                            ViewMode.LIST to "List View",
-                            ViewMode.GRID to "Grid View"
-                        ).forEach { (mode, label) ->
-                            DropdownMenuItem(text = {
+                DropdownMenu(
+                    expanded = showSortMenu,
+                    onDismissRequest = { onSortMenuChange(false) },
+                    containerColor = if (GlassTokens.isDarkTheme()) Color(0xFF1E1E1E) else Color(0xFFFFFFFF),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    SortOption.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
                                 Text(
-                                    label,
-                                    color = if (viewMode == mode) MaterialTheme.colorScheme.primary else textPrimary,
-                                    fontSize = 14.sp
+                                    option.displayName,
+                                    color = if (sortOption == option) MaterialTheme.colorScheme.primary else textPrimary,
+                                    fontSize = 13.sp
                                 )
-                            }, onClick = {
-                                viewMode = mode
-                                themeViewModel.setVideoViewMode(mode)
-                                showViewMenu = false
-                            }, leadingIcon = {
+                            },
+                            onClick = {
+                                onSortChange(option)
+                                onSortMenuChange(false)
+                            },
+                            leadingIcon = {
                                 Icon(
-                                    if (mode == ViewMode.LIST) Icons.AutoMirrored.Filled.ViewList
-                                    else Icons.Default.GridView,
+                                    option.icon,
                                     contentDescription = null,
-                                    tint = if (viewMode == mode) MaterialTheme.colorScheme.primary else textSecondary,
+                                    tint = if (sortOption == option) MaterialTheme.colorScheme.primary else textSecondary,
                                     modifier = Modifier.size(18.dp)
                                 )
-                            }, trailingIcon = {
-                                if (viewMode == mode) Icon(
-                                    Icons.Default.Check,
-                                    null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                            })
-                        }
+                            },
+                            trailingIcon = {
+                                if (sortOption == option) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -716,6 +715,8 @@ fun AllVideosContent(
                             viewModel = viewModel,
                             lastPlayedViewModel = lastPlayedViewModel,
                             onVideoClick = onVideoClick,
+                            onRename = onRename,           // ← Add
+                            onDelete = onDelete,           // ← Add
                             innerPadding = innerPadding
                         )
                     }
@@ -725,6 +726,8 @@ fun AllVideosContent(
                             viewModel = viewModel,
                             lastPlayedViewModel = lastPlayedViewModel,
                             onVideoClick = onVideoClick,
+                            onRename = onRename,           // ← Add (even if not used yet)
+                            onDelete = onDelete,           // ← Add
                             innerPadding = innerPadding
                         )
                     }
@@ -770,6 +773,8 @@ fun VideoItem(
     playlistViewModel: PlaylistViewModel = koinViewModel(),
     onVideoUpdated: () -> Unit = {},
     onClick: () -> Unit,
+    onRename: (VideoFile) -> Unit = {},
+    onDelete: (VideoFile) -> Unit = {},
     context: Context = LocalContext.current
 ) {
     val textPrimary = GlassTokens.getTextPrimary()
@@ -1034,6 +1039,38 @@ fun VideoItem(
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 3.dp),
                         color = chipBorder
+                    )
+                    // Rename
+                    DropdownMenuItem(
+                        text = { Text("Rename", color = textPrimary, fontSize = 14.sp) },
+                        onClick = {
+                            showMenu = false
+                            onRename(video)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Edit,
+                                null,
+                                tint = textSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+                    // Delete
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = MaterialTheme.colorScheme.error, fontSize = 14.sp) },
+                        onClick = {
+                            showMenu = false
+                            onDelete(video)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     )
 
                     if (playlists.playlists.isNotEmpty()) {
@@ -1374,21 +1411,8 @@ fun GlassFolderListContent(
     innerPadding: PaddingValues = PaddingValues(),
     themeViewModel: ThemeViewModel = koinViewModel()
 ) {
-    val textPrimary = GlassTokens.getTextPrimary()
-    val textSecondary = GlassTokens.getTextSecondary()
-    val savedViewMode by themeViewModel.themePreferences.collectAsState()
-    var viewMode by remember { mutableStateOf(savedViewMode.viewMode) }
-    var showViewMenu by remember { mutableStateOf(false) }
-
-    LaunchedEffect(savedViewMode.viewMode) {
-        viewMode = savedViewMode.viewMode
-    }
-
-    LaunchedEffect(viewMode) {
-        if (viewMode != savedViewMode.viewMode) {
-            themeViewModel.setFolderViewMode(viewMode)
-        }
-    }
+    val themePrefs by themeViewModel.themePreferences.collectAsState()
+    val viewMode = themePrefs.folderViewMode   // 👈 global preference
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -1402,88 +1426,7 @@ fun GlassFolderListContent(
                 GlassStatChip("${folders.size}", stringResource(R.string.folders))
                 GlassStatChip("${folders.sumOf { it.videoCount }}", stringResource(R.string.videos))
             }
-
-            Box {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .glassChip()
-                        .clickable { showViewMenu = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (viewMode == ViewMode.GRID) Icons.Default.GridView
-                        else Icons.AutoMirrored.Filled.ViewList,
-                        contentDescription = "Toggle view",
-                        tint = textSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = showViewMenu,
-                    onDismissRequest = { showViewMenu = false },
-                    containerColor = if (GlassTokens.isDarkTheme()) Color(0xFF1E1E1E) else Color(0xFFFFFFFF),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    DropdownMenuItem(text = {
-                        Text(
-                            stringResource(R.string.list_view),
-                            color = if (viewMode == ViewMode.LIST) MaterialTheme.colorScheme.primary else textPrimary,
-                            fontSize = 14.sp
-                        )
-                    }, onClick = {
-                        viewMode = ViewMode.LIST
-                        themeViewModel.setFolderViewMode(ViewMode.LIST)
-                        showViewMenu = false
-                    }, leadingIcon = {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ViewList,
-                            contentDescription = null,
-                            tint = if (viewMode == ViewMode.LIST) MaterialTheme.colorScheme.primary else textSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }, trailingIcon = {
-                        if (viewMode == ViewMode.LIST) {
-                            Icon(
-                                Icons.Default.Check,
-                                null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
-                    })
-
-                    DropdownMenuItem(text = {
-                        Text(
-                            stringResource(R.string.grid_view),
-                            color = if (viewMode == ViewMode.GRID) MaterialTheme.colorScheme.primary else textPrimary,
-                            fontSize = 14.sp
-                        )
-                    }, onClick = {
-                        viewMode = ViewMode.GRID
-                        themeViewModel.setFolderViewMode(ViewMode.GRID)
-                        showViewMenu = false
-                    }, leadingIcon = {
-                        Icon(
-                            Icons.Default.GridView,
-                            contentDescription = null,
-                            tint = if (viewMode == ViewMode.GRID) MaterialTheme.colorScheme.primary else textSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }, trailingIcon = {
-                        if (viewMode == ViewMode.GRID) {
-                            Icon(
-                                Icons.Default.Check,
-                                null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
-                    })
-                }
-            }
+            // 👇 No view mode toggle – removed entirely
         }
 
         if (folders.isEmpty()) {
@@ -1805,6 +1748,8 @@ fun AllVideosListView(
     viewModel: VideoViewModel,
     lastPlayedViewModel: LastPlayedViewModel,
     onVideoClick: (VideoFile, Long) -> Unit,
+    onRename: (VideoFile) -> Unit,      // ← Add this
+    onDelete: (VideoFile) -> Unit,      // ← Add this
     innerPadding: PaddingValues = PaddingValues()
 ) {
     var refreshTrigger by remember { mutableIntStateOf(0) }
@@ -1812,10 +1757,9 @@ fun AllVideosListView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
+            start = 16.dp, end = 16.dp,
             top = 6.dp,
             bottom = 6.dp + innerPadding.calculateBottomPadding() + 80.dp
         )
@@ -1826,7 +1770,9 @@ fun AllVideosListView(
                 viewModel = viewModel,
                 lastPlayedViewModel = lastPlayedViewModel,
                 onVideoUpdated = { refreshTrigger++ },
-                onClick = { onVideoClick(video, 0L) }
+                onClick = { onVideoClick(video, 0L) },
+                onRename = onRename,      // ← Pass here
+                onDelete = onDelete       // ← Pass here
             )
         }
     }
@@ -1839,6 +1785,8 @@ fun AllVideosGridView(
     viewModel: VideoViewModel,
     lastPlayedViewModel: LastPlayedViewModel,
     onVideoClick: (VideoFile, Long) -> Unit,
+    onRename: (VideoFile) -> Unit,      // ← Add
+    onDelete: (VideoFile) -> Unit,      // ← Add
     innerPadding: PaddingValues = PaddingValues()
 ) {
     var refreshTrigger by remember { mutableIntStateOf(0) }
@@ -1848,8 +1796,7 @@ fun AllVideosGridView(
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
+            start = 16.dp, end = 16.dp,
             top = 6.dp,
             bottom = 6.dp + innerPadding.calculateBottomPadding() + 80.dp
         ),
@@ -1861,7 +1808,9 @@ fun AllVideosGridView(
                 video = video,
                 viewModel = viewModel,
                 lastPlayedViewModel = lastPlayedViewModel,
-                onClick = { onVideoClick(video, 0L) }
+                onClick = { onVideoClick(video, 0L) },
+                onRename = onRename,      // ← Pass
+                onDelete = onDelete       // ← Pass (you'll need to add these params to VideoGridItem)
             )
         }
     }
@@ -1874,13 +1823,20 @@ fun VideoGridItem(
     viewModel: VideoViewModel,
     lastPlayedViewModel: LastPlayedViewModel,
     onClick: () -> Unit,
+    onRename: (VideoFile) -> Unit = {},
+    onDelete: (VideoFile) -> Unit = {},
     context: Context = LocalContext.current
 ) {
     val resumableVideo by lastPlayedViewModel.resumableVideo.collectAsState()
+    val textPrimary = GlassTokens.getTextPrimary()
+    val textSecondary = GlassTokens.getTextSecondary()
+    val chipBorder = GlassTokens.getChipBorder()
+
     val savedPosition = remember(resumableVideo, video.id) {
         if (resumableVideo?.videoId == video.id &&
             resumableVideo!!.position > 0 &&
-            resumableVideo!!.position < video.duration) {
+            resumableVideo!!.position < video.duration
+        ) {
             resumableVideo!!.position
         } else {
             0L
@@ -1889,6 +1845,9 @@ fun VideoGridItem(
     val hasProgress = savedPosition > 0 && savedPosition < video.duration
     val progressFraction = if (hasProgress) savedPosition.toFloat() / video.duration.toFloat() else 0f
     val videoExists = remember(video.path) { File(video.path).exists() }
+
+    var showMenu by remember { mutableStateOf(false) }
+    var showDetailsSheet by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -1901,24 +1860,23 @@ fun VideoGridItem(
             )
             .clickable(enabled = videoExists) {
                 if (videoExists) onClick()
-                else {
-                    Toast.makeText(context, "Video file not found", Toast.LENGTH_SHORT).show()
-                }
+                else Toast.makeText(context, "Video file not found", Toast.LENGTH_SHORT).show()
             }
     ) {
+        // Thumbnail
         if (videoExists && video.thumbnailUri != null) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(video.thumbnailUri)
-                    .crossfade(true).build(),
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(video.thumbnailUri)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1931,6 +1889,7 @@ fun VideoGridItem(
             }
         }
 
+        // Progress Arc
         if (videoExists && hasProgress) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val stroke = 4.dp.toPx()
@@ -1951,6 +1910,7 @@ fun VideoGridItem(
             }
         }
 
+        // Gradient Overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1964,6 +1924,7 @@ fun VideoGridItem(
                 )
         )
 
+        // Duration Badge
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -1980,6 +1941,7 @@ fun VideoGridItem(
             )
         }
 
+        // Center Play Icon
         if (videoExists) {
             Box(
                 modifier = Modifier
@@ -1998,14 +1960,16 @@ fun VideoGridItem(
             }
         }
 
+        // Video Info at Bottom
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(12.dp)
         ) {
             Text(
-                text = video.name.removeSuffix(".mp4").removeSuffix(".mkv").removeSuffix(".avi")
-                    .removeSuffix(".mov").removeSuffix(".webm").removeSuffix(".flv"),
+                text = video.name.removeSuffix(".mp4").removeSuffix(".mkv")
+                    .removeSuffix(".avi").removeSuffix(".mov")
+                    .removeSuffix(".webm").removeSuffix(".flv"),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (videoExists) Color.White else Color.White.copy(alpha = 0.5f),
@@ -2051,6 +2015,141 @@ fun VideoGridItem(
                 }
             }
         }
+
+        // MoreVert Menu Button (Top Right)
+        if (videoExists) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(0.4f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { showMenu = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "More options",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    containerColor = if (GlassTokens.isDarkTheme()) Color(0xFF1E1E1E) else Color(0xFFFFFFFF),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Play", color = textPrimary, fontSize = 14.sp) },
+                        onClick = {
+                            showMenu = false
+                            onClick()
+                        },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.PlayArrow,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = { Text("Details", color = textPrimary, fontSize = 14.sp) },
+                        onClick = {
+                            showMenu = false
+                            showDetailsSheet = true
+                        },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 3.dp),
+                        color = chipBorder
+                    )
+
+                    // Rename
+                    DropdownMenuItem(
+                        text = { Text("Rename", color = textPrimary, fontSize = 14.sp) },
+                        onClick = {
+                            showMenu = false
+                            onRename(video)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Edit,
+                                null,
+                                tint = textSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+
+                    // Delete
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = MaterialTheme.colorScheme.error, fontSize = 14.sp) },
+                        onClick = {
+                            showMenu = false
+                            onDelete(video)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // Details Bottom Sheet
+    if (showDetailsSheet && videoExists) {
+        GlassVideoDetailsBottomSheet(
+            video = video,
+            viewModel = viewModel,
+            onDismiss = { showDetailsSheet = false },
+            onPlay = {
+                showDetailsSheet = false
+                onClick()
+            }
+        )
     }
 }
 
@@ -2230,11 +2329,6 @@ fun ResumeFab(
     }
 }
 
-fun formatDate(timestamp: Long): String {
-    val date = Date(timestamp)
-    val format = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault())
-    return format.format(date)
-}
 
 @Composable
 fun PermissionRequestScreen(onRequestPermission: () -> Unit) {
@@ -2343,10 +2437,6 @@ fun PermissionDialog(onDismiss: () -> Unit, onAllow: () -> Unit) {
         shape = RoundedCornerShape(20.dp)
     )
 }
-
-
-
-
 
 
 
