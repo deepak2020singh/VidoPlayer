@@ -6,4 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface VideoRepository {
     fun getVideos(): Flow<List<VideoFile>>
+
+    suspend fun renameVideo(video: VideoFile, newName: String): Boolean
+    suspend fun deleteVideos(videos: List<VideoFile>): Int
 }
