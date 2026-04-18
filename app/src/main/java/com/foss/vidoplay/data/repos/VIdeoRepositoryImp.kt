@@ -3,6 +3,7 @@ package com.foss.vidoplay.data.repos
 
 import android.annotation.SuppressLint
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
@@ -122,4 +123,66 @@ class VideoRepositoryImpl(
         Log.d(TAG, "Total videos found: ${videoList.size}")
         return videoList
     }
+
+
+    override suspend fun renameVideo(video: VideoFile, newName: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val extension = video.name.substringAfterLast('.', "")
+                val fullNewName = if (extension.isNotEmpty()) "$newName.$extension" else newName
+
+                val values = ContentValues().apply {
+                    put(MediaStore.Video.Media.DISPLAY_NAME, fullNewName)
+                }
+
+                val rowsUpdated = context.contentResolver.update(
+                    video.uri,
+                    values,
+                    null,
+                    null
+                )
+
+                if (rowsUpdated > 0) {
+                    Log.d(TAG, "Successfully renamed: ${video.name} → $fullNewName")
+                    true
+                } else {
+                    Log.w(TAG, "Failed to rename ${video.name} - no rows updated")
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Rename failed for ${video.name}", e)
+                false
+            }
+        }
+    }
+
+    override suspend fun deleteVideos(videos: List<VideoFile>): Int {
+        return withContext(Dispatchers.IO) {
+            var deletedCount = 0
+
+            videos.forEach { video ->
+                try {
+                    val rowsDeleted = context.contentResolver.delete(video.uri, null, null)
+
+                    if (rowsDeleted > 0) {
+                        Log.d(TAG, "Deleted: ${video.name}")
+                        deletedCount++
+                    } else {
+                        // Fallback: try direct file deletion
+                        if (File(video.path).delete()) {
+                            Log.d(TAG, "Fallback delete successful: ${video.name}")
+                            deletedCount++
+                        } else {
+                            Log.w(TAG, "Failed to delete ${video.name}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Exception while deleting ${video.name}", e)
+                }
+            }
+            deletedCount
+        }
+    }
+
+
 }
