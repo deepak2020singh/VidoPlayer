@@ -8,8 +8,12 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -37,6 +41,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -49,17 +54,18 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Adjust
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
@@ -67,6 +73,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Error
@@ -79,7 +86,6 @@ import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.HdrOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Pause
@@ -140,18 +146,21 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.times
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
 import androidx.core.app.PictureInPictureModeChangedInfo
@@ -202,7 +211,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
-
 @OptIn(UnstableApi::class)
 @Composable
 fun ExoPlayerScreen(
@@ -230,38 +238,21 @@ fun ExoPlayerScreen(
     val errorColor = colorScheme.error
     val onPrimary = colorScheme.onPrimary
 
-    // States
     var isTransitioning by remember { mutableStateOf(false) }
     var isInPipMode by remember { mutableStateOf(false) }
 
-    // Observe playlist and index from ViewModel
     val state by viewModel.state.collectAsState()
     val playlist = state.playlist
     val currentIndex = state.currentIndex
-
     val hasPrevious = viewModel.hasPrevious()
     val hasNext = viewModel.hasNext()
 
     var thumbnailBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    // Update when video changes (to reset transition flag)
     LaunchedEffect(state.currentVideo?.id) {
-        if (state.currentVideo?.id != video.id) {
-            isTransitioning = false
-        }
+        if (state.currentVideo?.id != video.id) isTransitioning = false
     }
 
-    // Debug logging
-    LaunchedEffect(currentIndex, playlist.size, state.currentVideo) {
-        Log.d("ExoPlayerDebug", "=== Navigation State ===")
-        Log.d("ExoPlayerDebug", "Current Video: ${state.currentVideo?.name}")
-        Log.d("ExoPlayerDebug", "Current Index: $currentIndex")
-        Log.d("ExoPlayerDebug", "Total Videos: ${playlist.size}")
-        Log.d("ExoPlayerDebug", "Has Previous: $hasPrevious")
-        Log.d("ExoPlayerDebug", "Has Next: $hasNext")
-    }
-
-    // Glass theme values
     val textPrimary = GlassTokens.getTextPrimary()
     val textSecondary = GlassTokens.getTextSecondary()
     val textTertiary = GlassTokens.getTextTertiary()
@@ -271,7 +262,6 @@ fun ExoPlayerScreen(
     val redAccent = GlassTokens.RedAccent
     val amberDot = GlassTokens.AmberDot
 
-    // UI States
     var isLandscape by remember { mutableStateOf(configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) }
     var isControlsVisible by remember { mutableStateOf(true) }
     var showBottomControls by remember { mutableStateOf(true) }
@@ -303,14 +293,11 @@ fun ExoPlayerScreen(
     var speedBoostValue by remember { mutableFloatStateOf(2f) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
 
-    data class SeekTrigger(val side: SeekSide, val seconds: Int, val id: Int = 0)
-
     var seekTrigger by remember { mutableStateOf<SeekTrigger?>(null) }
 
     val playerReady by ExoPlayerManager.isPlayerReady.collectAsState()
-    val currentBookmarks = remember(state.bookmarks, state.currentVideo) {
-        viewModel.getBookmarksForCurrentVideo()
-    }
+    val currentBookmarks =
+        remember(state.bookmarks, state.currentVideo) { viewModel.getBookmarksForCurrentVideo() }
     val hasBookmarks = currentBookmarks.isNotEmpty()
 
     val effectiveStartPosition: Long = remember(video.id, startPosition) {
@@ -318,79 +305,17 @@ fun ExoPlayerScreen(
             startPosition > 0L -> startPosition
             else -> {
                 val info = lastPlayedViewModel.getResumableVideo()
-                if (info != null && info.videoId == video.id && info.position in 1L until video.duration)
-                    info.position else 0L
+                if (info != null && info.videoId == video.id && info.position in 1L until video.duration) info.position else 0L
             }
         }
     }
 
     val exoPlayer = remember { ExoPlayerManager.initialize(context) }
 
-    LaunchedEffect(video.uri) {
-        Log.d("ExoPlayerScreen", "Preparing initial video: ${video.name}")
-        ExoPlayerManager.prepareVideo(
-            uri = video.uri.toString(),
-            startPosition = effectiveStartPosition,
-            shouldPlay = isPlaying
-        )
-    }
+    LaunchedEffect(Unit) { mainActivity?.onPlayerScreenEntered() }
 
-    LaunchedEffect(state.currentVideo) {
-        val newVideo = state.currentVideo
-        if (newVideo != null && newVideo.id != video.id) {
-            Log.d("ExoPlayerScreen", "Switching to: ${newVideo.name}")
-            ExoPlayerManager.prepareVideo(
-                uri = newVideo.uri.toString(),
-                startPosition = 0L,
-                shouldPlay = true
-            )
-        }
-    }
-
-    LaunchedEffect(isPlaying) {
-        if (!isInPipMode && !isTransitioning) {
-            if (isPlaying) ExoPlayerManager.play() else ExoPlayerManager.pause()
-        }
-        viewModel.updatePlaybackState(isPlaying = isPlaying)
-    }
-
-    LaunchedEffect(state.isMuted, state.volume) {
-        ExoPlayerManager.setVolume(if (state.isMuted) 0f else state.volume)
-    }
-
-    LaunchedEffect(state.playbackSpeed) {
-        ExoPlayerManager.setPlaybackSpeed(state.playbackSpeed)
-    }
-
-    LaunchedEffect(configuration) {
-        isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    }
-
-    // === Navigation: delegate to ViewModel ===
-    val performSmoothNext = {
-        if (!isTransitioning && hasNext) {
-            isTransitioning = true
-            viewModel.playNext()
-            scope.launch {
-                delay(300)
-                isTransitioning = false
-            }
-        }
-    }
-
-    val performSmoothPrevious = {
-        if (!isTransitioning && hasPrevious) {
-            isTransitioning = true
-            viewModel.playPrevious()
-            scope.launch {
-                delay(300)
-                isTransitioning = false
-            }
-        }
-    }
-
-    // Handle Close - ONLY THIS BUTTON CHANGES ORIENTATION TO PORTRAIT
-    val handleClose = {
+    val handleClose: () -> Unit = {
+        mainActivity?.preventPipOnNextLeave()
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         if (state.isFullScreen) viewModel.toggleFullScreen()
         ExoPlayerManager.pause()
@@ -398,7 +323,50 @@ fun ExoPlayerScreen(
         onClose()
     }
 
-    // Polling for position
+    LaunchedEffect(video.uri) {
+        ExoPlayerManager.prepareVideo(
+            uri = video.uri.toString(),
+            startPosition = effectiveStartPosition,
+            shouldPlay = isPlaying
+        )
+    }
+    LaunchedEffect(state.currentVideo) {
+        val nv = state.currentVideo
+        if (nv != null && nv.id != video.id)
+            ExoPlayerManager.prepareVideo(
+                uri = nv.uri.toString(),
+                startPosition = 0L,
+                shouldPlay = true
+            )
+    }
+    LaunchedEffect(isPlaying) {
+        if (!isInPipMode && !isTransitioning) {
+            if (isPlaying) ExoPlayerManager.play() else ExoPlayerManager.pause()
+        }
+        viewModel.updatePlaybackState(isPlaying = isPlaying)
+    }
+    LaunchedEffect(
+        state.isMuted,
+        state.volume
+    ) { ExoPlayerManager.setVolume(if (state.isMuted) 0f else state.volume) }
+    LaunchedEffect(state.playbackSpeed) { ExoPlayerManager.setPlaybackSpeed(state.playbackSpeed) }
+    LaunchedEffect(configuration) {
+        isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    }
+
+    val performSmoothNext = {
+        if (!isTransitioning && hasNext) {
+            isTransitioning = true; viewModel.playNext()
+            scope.launch { delay(300); isTransitioning = false }
+        }
+    }
+    val performSmoothPrevious = {
+        if (!isTransitioning && hasPrevious) {
+            isTransitioning = true; viewModel.playPrevious()
+            scope.launch { delay(300); isTransitioning = false }
+        }
+    }
+
     LaunchedEffect(Unit) {
         var lastSavedPos = -1L
         while (true) {
@@ -414,15 +382,13 @@ fun ExoPlayerScreen(
                     duration = dur
                 )
                 if (playing && abs(pos - lastSavedPos) >= 2000L) {
-                    lastPlayedViewModel.savePosition(pos)
-                    lastSavedPos = pos
+                    lastPlayedViewModel.savePosition(pos); lastSavedPos = pos
                 }
             } catch (e: Exception) {
                 Log.w("ExoPlayerScreen", "Polling skipped: ${e.message}")
             }
         }
     }
-
     LaunchedEffect(video.id) {
         lastPlayedViewModel.save(
             LastPlayedInfo(
@@ -437,32 +403,25 @@ fun ExoPlayerScreen(
         )
         viewModel.clearBookmarks()
     }
-
-    // Load subtitle tracks when player is ready
-    LaunchedEffect(playerReady, state.currentVideo) {
-        if (playerReady) {
-            viewModel.loadSubtitleTracks()
-        }
-    }
-
-    // Auto-hide controls
+    LaunchedEffect(
+        playerReady,
+        state.currentVideo
+    ) { if (playerReady) viewModel.loadSubtitleTracks() }
     LaunchedEffect(isControlsVisible, state.isScreenLocked, showMoreMenu, isCapturingScreenshot) {
         if (isControlsVisible && !state.isScreenLocked && !isDraggingVolume && !isDraggingBrightness && !showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
-            delay(3000)
-            isControlsVisible = false
+            delay(3000); isControlsVisible = false
         }
     }
-
-    // Fullscreen handling - Keep landscape mode when in fullscreen
     LaunchedEffect(state.isFullScreen) {
         activity?.let {
             if (state.isFullScreen) {
                 it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 WindowCompat.setDecorFitsSystemWindows(it.window, false)
                 WindowInsetsControllerCompat(it.window, it.window.decorView).apply {
-                    hide(WindowInsetsCompat.Type.systemBars())
-                    systemBarsBehavior =
-                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    hide(
+                        WindowInsetsCompat.Type.systemBars()
+                    ); systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 }
             } else {
                 it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -475,29 +434,26 @@ fun ExoPlayerScreen(
         }
     }
 
-    // Lifecycle & PIP handling
     DisposableEffect(Unit) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
                     if (!isInPipMode && !isTransitioning) {
-                        ExoPlayerManager.pause()
-                        viewModel.updatePlaybackState(isPlaying = false)
-                        scope.launch {
-                            lastPlayedViewModel.savePositionImmediate(ExoPlayerManager.getCurrentPosition())
+                        ExoPlayerManager.pause(); viewModel.updatePlaybackState(isPlaying = false); scope.launch {
+                            lastPlayedViewModel.savePositionImmediate(
+                                ExoPlayerManager.getCurrentPosition()
+                            )
                         }
                     }
                 }
 
                 Lifecycle.Event.ON_RESUME -> {
-                    if (state.isPlaying && !isInPipMode && !isTransitioning)
-                        ExoPlayerManager.play()
+                    if (state.isPlaying && !isInPipMode && !isTransitioning) ExoPlayerManager.play()
                 }
 
                 Lifecycle.Event.ON_DESTROY -> {
-                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    ExoPlayerManager.pause()
-                    ExoPlayerManager.resetForNewVideo()
+                    activity?.requestedOrientation =
+                        ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED; ExoPlayerManager.pause(); ExoPlayerManager.resetForNewVideo()
                 }
 
                 else -> {}
@@ -505,58 +461,51 @@ fun ExoPlayerScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            scope.launch {
-                lastPlayedViewModel.savePositionImmediate(ExoPlayerManager.getCurrentPosition())
-            }
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            ExoPlayerManager.pause()
-            ExoPlayerManager.resetForNewVideo()
+            lifecycleOwner.lifecycle.removeObserver(observer); scope.launch {
+            lastPlayedViewModel.savePositionImmediate(
+                ExoPlayerManager.getCurrentPosition()
+            )
+        }; activity?.requestedOrientation =
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED; ExoPlayerManager.pause(); ExoPlayerManager.resetForNewVideo()
         }
     }
 
-    // PIP Handlers
     LaunchedEffect(state.videoWidth, state.videoHeight, state.isPlaying, hasNext, hasPrevious) {
+        mainActivity?.updatePipParams(
+            videoWidth = state.videoWidth,
+            videoHeight = state.videoHeight,
+            isPlaying = state.isPlaying,
+            hasNext = hasNext,
+            hasPrevious = hasPrevious
+        )
         mainActivity?.onPipPlayPause = {
-            val currentlyPlaying = ExoPlayerManager.isPlaying()
-            val newIsPlaying = !currentlyPlaying
-            if (newIsPlaying) ExoPlayerManager.play() else ExoPlayerManager.pause()
-            onPlayPause()
-            mainActivity.updatePipParams(
-                state.videoWidth,
-                state.videoHeight,
-                newIsPlaying,
-                hasNext,
-                hasPrevious
-            )
+            val np =
+                !ExoPlayerManager.isPlaying(); if (np) ExoPlayerManager.play() else ExoPlayerManager.pause(); onPlayPause(); mainActivity.updatePipParams(
+            state.videoWidth,
+            state.videoHeight,
+            np,
+            hasNext,
+            hasPrevious
+        )
         }
         mainActivity?.onPipPrevious = {
-            if (hasPrevious) performSmoothPrevious()
-            mainActivity.updatePipParams(
-                state.videoWidth,
-                state.videoHeight,
-                state.isPlaying,
-                hasNext,
-                hasPrevious
-            )
-        }
-        mainActivity?.onPipNext = {
-            if (hasNext) performSmoothNext()
-            mainActivity.updatePipParams(
-                state.videoWidth,
-                state.videoHeight,
-                state.isPlaying,
-                hasNext,
-                hasPrevious
-            )
-        }
-        mainActivity?.updatePipParams(
+            if (hasPrevious) performSmoothPrevious(); mainActivity.updatePipParams(
             state.videoWidth,
             state.videoHeight,
             state.isPlaying,
             hasNext,
             hasPrevious
         )
+        }
+        mainActivity?.onPipNext = {
+            if (hasNext) performSmoothNext(); mainActivity.updatePipParams(
+            state.videoWidth,
+            state.videoHeight,
+            state.isPlaying,
+            hasNext,
+            hasPrevious
+        )
+        }
     }
 
     DisposableEffect(activity) {
@@ -564,22 +513,14 @@ fun ExoPlayerScreen(
         val listener = Consumer<PictureInPictureModeChangedInfo> { info ->
             isInPipMode = info.isInPictureInPictureMode
             if (isInPipMode) {
-                isControlsVisible = false
-                showBottomControls = false
-                showMoreMenu = false
-                showVideoAdjustments = false
-                showAdvancedMenu = false
-                showVideoInfo = false
-                showEqualizerPanel = false
-                showSuggestions = false
-                showAudioMenu = false
-                showSpeedMenu = false
-                showSleepTimerMenu = false
-                showSubtitleMenu = false
-                isDraggingVolume = false
-                isDraggingBrightness = false
-                showVolumeIndicator = false
-                showBrightnessIndicator = false
+                isControlsVisible = false; showBottomControls = false; showMoreMenu = false
+                showVideoAdjustments = false; showAdvancedMenu = false; showVideoInfo = false
+                showEqualizerPanel = false; showSuggestions = false; showAudioMenu = false
+                showSpeedMenu = false; showSleepTimerMenu = false; showSubtitleMenu = false
+                isDraggingVolume = false; isDraggingBrightness = false
+                showVolumeIndicator = false; showBrightnessIndicator = false
+            } else {
+                isControlsVisible = true; showBottomControls = true
             }
         }
         activity.addOnPictureInPictureModeChangedListener(listener)
@@ -588,48 +529,85 @@ fun ExoPlayerScreen(
 
     val isBuffering = exoPlayer.playbackState == Player.STATE_BUFFERING
 
-    // Animations
     val controlsAlpha by animateFloatAsState(
         targetValue = if ((isControlsVisible && !state.isScreenLocked && !isInPipMode && !isBuffering) || showMoreMenu) 1f else 0f,
         animationSpec = tween(
             250,
             delayMillis = if (isBuffering) 0 else 350,
             easing = FastOutSlowInEasing
-        ),
-        label = "controlsAlpha"
+        ), label = "controlsAlpha"
     )
-
-    val infiniteTransition = rememberInfiniteTransition(label = "glow")
-    val glowAlpha by infiniteTransition.animateFloat(
+    val infTrans = rememberInfiniteTransition(label = "glow")
+    val glowAlpha by infTrans.animateFloat(
         0.25f,
         0.6f,
         infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "glowAlpha"
     )
-    val glowScale by infiniteTransition.animateFloat(
+    val glowScale by infTrans.animateFloat(
         1f,
         1.18f,
         infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "glowScale"
     )
 
-    // Custom slide animations for bottom controls row
-    val bottomRowSlideIn = slideInHorizontally(
-        initialOffsetX = { it },   // start from right
-        animationSpec = tween(300, easing = FastOutSlowInEasing)
-    ) + fadeIn(tween(200))
+    val bottomRowEnter = slideInHorizontally(
+        initialOffsetX = { it / 2 },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        )
+    ) + fadeIn(tween(200, easing = FastOutSlowInEasing))
+    val bottomRowExit = slideOutHorizontally(
+        targetOffsetX = { it },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        )
+    ) + fadeOut(tween(150, easing = FastOutSlowInEasing))
+    val restoreBtnEnter = slideInHorizontally(
+        initialOffsetX = { it },
+        animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow)
+    ) + fadeIn(tween(150)) + scaleIn(
+        initialScale = 0.65f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium)
+    )
+    val restoreBtnExit = slideOutHorizontally(
+        targetOffsetX = { it },
+        animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium)
+    ) + fadeOut(tween(100))
 
-    val bottomRowSlideOut = slideOutHorizontally(
-        targetOffsetX = { it },    // exit to right
-        animationSpec = tween(300, easing = FastOutSlowInEasing)
-    ) + fadeOut(tween(200))
 
-    // Main UI
+    val subtitlePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri: Uri? ->
+            uri?.let {
+                // Determine MIME type based on file extension
+                val mimeType = when {
+                    it.toString().endsWith(".srt", ignoreCase = true) -> "application/x-subrip"
+                    it.toString().endsWith(".vtt", ignoreCase = true) -> "text/vtt"
+                    else -> "application/x-subrip"
+                }
+                val fileName = it.lastPathSegment ?: "External"
+                viewModel.loadExternalSubtitle(
+                    context = context,
+                    uri = it,
+                    mimeType = mimeType,
+                    language = "ext",
+                    label = fileName
+                )
+                Toast.makeText(context, "External subtitle loaded", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+
+    // MAIN UI
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(if (isDark) Color.Black else Color.White)
-            .padding(innerPadding)
+            .padding(if (isLandscape) PaddingValues(0.dp) else innerPadding)
             .keepScreenOn(enabled = state.isPlaying && !isInPipMode)
             .pointerInput(
                 isInPipMode,
@@ -638,61 +616,63 @@ fun ExoPlayerScreen(
                 showMoreMenu,
                 isTransitioning
             ) {
-                if (isInPipMode || state.isScreenLocked || isCapturingScreenshot || showMoreMenu || isTransitioning) return@pointerInput
+                if (isInPipMode || isCapturingScreenshot || showMoreMenu || isTransitioning) return@pointerInput
+                if (state.isScreenLocked) return@pointerInput
                 detectTapGestures(
                     onTap = {
-                        isControlsVisible = !isControlsVisible
-                        viewModel.toggleControls(isControlsVisible)
+                        isControlsVisible = !isControlsVisible; viewModel.toggleControls(
+                        isControlsVisible
+                    )
                     },
                     onDoubleTap = { tapOffset ->
                         val thirds = size.width / 3f
                         when {
                             tapOffset.x < thirds -> {
-                                val newPos =
+                                val np =
                                     (ExoPlayerManager.getCurrentPosition() - 10_000L).coerceAtLeast(
                                         0
                                     )
-                                ExoPlayerManager.seekTo(newPos)
-                                viewModel.updatePlaybackState(currentPosition = newPos)
+                                ExoPlayerManager.seekTo(np); viewModel.updatePlaybackState(
+                                    currentPosition = np
+                                )
                                 seekTrigger =
                                     SeekTrigger(SeekSide.LEFT, 10, (seekTrigger?.id ?: 0) + 1)
                             }
 
                             tapOffset.x > thirds * 2 -> {
-                                val newPos =
+                                val np =
                                     (ExoPlayerManager.getCurrentPosition() + 10_000L).coerceAtMost(
                                         ExoPlayerManager.getDuration()
                                     )
-                                ExoPlayerManager.seekTo(newPos)
-                                viewModel.updatePlaybackState(currentPosition = newPos)
+                                ExoPlayerManager.seekTo(np); viewModel.updatePlaybackState(
+                                    currentPosition = np
+                                )
                                 seekTrigger =
                                     SeekTrigger(SeekSide.RIGHT, 10, (seekTrigger?.id ?: 0) + 1)
                             }
 
                             else -> {
-                                scale = if (scale > 1f) 1f else 2f
-                                offset = Offset.Zero
+                                scale = if (scale > 1f) 1f else 2f; offset = Offset.Zero
                             }
                         }
                     },
                     onLongPress = {
                         if (!isInPipMode) {
-                            speedBoostValue = 2f
-                            speedBadgeVisible = true
-                            viewModel.enterSpeedGesture(boostSpeed = 2f)
+                            speedBoostValue = 2f; speedBadgeVisible =
+                                true; viewModel.enterSpeedGesture(
+                                boostSpeed = 2f
+                            )
                         }
                     },
                     onPress = {
-                        tryAwaitRelease()
-                        if (speedBadgeVisible) {
-                            speedBadgeVisible = false
-                            viewModel.exitSpeedGesture()
-                        }
+                        tryAwaitRelease(); if (speedBadgeVisible) {
+                        speedBadgeVisible = false; viewModel.exitSpeedGesture()
+                    }
                     }
                 )
             }
     ) {
-        // Ambient background
+        // Ambient orbs
         if (!isInPipMode) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cx = size.width / 2
@@ -703,11 +683,11 @@ fun ExoPlayerScreen(
                     val y = cy + sin(angle * PI.toFloat() / 180f) * size.height * 0.3f
                     drawCircle(
                         brush = Brush.radialGradient(
-                            listOf(primaryColor.copy(alpha = 0.08f), Color.Transparent),
-                            Offset(x, y)
-                        ),
-                        radius = size.width * 0.4f,
-                        center = Offset(x, y)
+                            listOf(
+                                primaryColor.copy(alpha = 0.08f),
+                                Color.Transparent
+                            ), Offset(x, y)
+                        ), radius = size.width * 0.4f, center = Offset(x, y)
                     )
                 }
             }
@@ -721,45 +701,42 @@ fun ExoPlayerScreen(
                     if (isInPipMode) return@pointerInput
                     detectTransformGestures { _, pan, zoom, _ ->
                         if (state.isZoomEnabled && !state.isScreenLocked) {
-                            val newScale = max(1f, min(3f, scale * zoom))
-                            scale = newScale
-                            val maxX = (size.width * (scale - 1)) / 2
-                            val maxY = (size.height * (scale - 1)) / 2
+                            val ns = max(1f, min(3f, scale * zoom)); scale = ns
+                            val mx = (size.width * (scale - 1)) / 2
+                            val my = (size.height * (scale - 1)) / 2
                             offset = Offset(
-                                max(-maxX, min(maxX, offset.x + pan.x)),
-                                max(-maxY, min(maxY, offset.y + pan.y))
+                                max(-mx, min(mx, offset.x + pan.x)),
+                                max(-my, min(my, offset.y + pan.y))
                             )
                         }
                     }
                 }
                 .graphicsLayer {
-                    scaleX = scale; scaleY = scale
-                    translationX = offset.x; translationY = offset.y
+                    scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y
                     rotationZ = state.rotation.toFloat()
-                    if (state.flipHorizontal) scaleX = -scaleX
-                    if (state.flipVertical) scaleY = -scaleY
+                    if (state.flipHorizontal) scaleX = -scaleX; if (state.flipVertical) scaleY =
+                    -scaleY
                     transformOrigin = TransformOrigin.Center
                 }
         ) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
-                        player = exoPlayer
-                        useController = false
-                        resizeMode = resolveResizeMode(isShortVideoMode, state)
-                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        player = exoPlayer; useController = false; resizeMode = resolveResizeMode(
+                        isShortVideoMode,
+                        state
+                    ); setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                     }.also { playerViewRef = it }
                 },
                 update = { pv ->
-                    pv.resizeMode = resolveResizeMode(isShortVideoMode, state)
-                    playerViewRef = pv
+                    pv.resizeMode = resolveResizeMode(isShortVideoMode, state); playerViewRef = pv
                 },
                 modifier = Modifier.fillMaxSize()
             )
         }
 
         if (!isInPipMode) {
-            // Buffering overlay
+            // Buffering
             AnimatedVisibility(
                 visible = isBuffering,
                 enter = fadeIn(tween(200)),
@@ -783,20 +760,25 @@ fun ExoPlayerScreen(
                                 .size(72.dp)
                                 .drawWithCache {
                                     onDrawBehind {
-                                        val sweep =
-                                            (System.currentTimeMillis() % 1800) / 1800f * 360f
-                                        drawArc(
-                                            Brush.sweepGradient(
-                                                listOf(
-                                                    Color.Transparent,
-                                                    primaryColor,
-                                                    secondaryColor
-                                                )
-                                            ), sweep, 270f, false, style = Stroke(5f)
-                                        )
+                                        val sw =
+                                            (System.currentTimeMillis() % 1800) / 1800f * 360f; drawArc(
+                                        Brush.sweepGradient(
+                                            colors = listOf(
+                                                Color.Transparent,
+                                                primaryColor,
+                                                secondaryColor
+                                            )
+                                        ),
+                                        startAngle = sw,
+                                        sweepAngle = 270f,
+                                        useCenter = false,
+                                        style = Stroke(5f)
+                                    )
                                     }
                                 }, contentAlignment = Alignment.Center
-                        ) {}
+                        ) {
+
+                        }
                         Spacer(Modifier.height(14.dp))
                         Text(
                             "Buffering…",
@@ -808,194 +790,102 @@ fun ExoPlayerScreen(
                 }
             }
 
-            // Volume Control
+            // Volume drag zone (left edge)
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(if (isLandscape) 100.dp else 80.dp)
+                    .width(if (isLandscape) 130.dp else 110.dp)
                     .align(Alignment.CenterStart)
-                    .pointerInput(Unit) {
+                    .pointerInput(state.isScreenLocked) {
+                        if (state.isScreenLocked) return@pointerInput
                         detectDragGestures(
                             onDragStart = { _ ->
-                                if (!state.isScreenLocked && !showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
+                                if (!showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
                                     isDraggingVolume = true
                                     dragStartVolume = if (state.isMuted) 0f else state.volume
                                     showVolumeIndicator = true
                                     isControlsVisible = true
                                 }
                             },
-                            onDrag = { _, dragAmount ->
-                                if (!state.isScreenLocked && !showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
-                                    val dragDelta = -dragAmount.y / (size.height / 1.5f)
-                                    val newVol = (dragStartVolume + dragDelta).coerceIn(0f, 1f)
-                                    viewModel.updatePlaybackState(
-                                        volume = newVol,
-                                        isMuted = newVol == 0f
-                                    )
-                                    ExoPlayerManager.setVolume(newVol)
-                                    dragStartVolume = newVol
+                            onDrag = { _, drag ->
+                                if (!showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
+                                    val nv = (dragStartVolume + (-drag.y / (size.height / 1.6f)))
+                                        .coerceIn(0f, 1f)
+                                    viewModel.updatePlaybackState(volume = nv, isMuted = nv == 0f)
+                                    ExoPlayerManager.setVolume(nv)
+                                    dragStartVolume = nv
                                     showVolumeIndicator = true
                                 }
                             },
-                            onDragEnd = {
-                                isDraggingVolume = false
-                                scope.launch {
-                                    delay(1500); if (!isDraggingVolume) showVolumeIndicator = false
-                                }
-                            },
+                            onDragEnd = { isDraggingVolume = false; showVolumeIndicator = false },
                             onDragCancel = { isDraggingVolume = false; showVolumeIndicator = false }
                         )
                     }
             )
 
-            // Volume Vertical Slider
             GlassVerticalSlider(
                 value = if (state.isMuted) 0f else state.volume,
-                onValueChange = { newVol ->
-                    viewModel.updatePlaybackState(volume = newVol, isMuted = newVol == 0f)
-                    ExoPlayerManager.setVolume(newVol)
+                onValueChange = { v ->
+                    viewModel.updatePlaybackState(volume = v, isMuted = v == 0f)
+                    ExoPlayerManager.setVolume(v)
                 },
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .padding(start = 80.dp),
+                    .fillMaxHeight(),   // ← add this
                 color = primaryColor,
                 label = "Volume",
                 isVisible = showVolumeIndicator && isDraggingVolume
             )
 
-            // Volume Compact Indicator
-            AnimatedVisibility(
-                visible = showVolumeIndicator && !isDraggingVolume,
-                enter = GlassAnimations.IndicatorEnter, exit = GlassAnimations.IndicatorExit,
-                modifier = Modifier.align(Alignment.CenterStart)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(start = 24.dp)
-                        .size(80.dp)
-                        .glass(cornerRadius = 20.dp, bgAlpha = 0.72f)
-                        .padding(12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                            null,
-                            tint = if (state.isMuted) errorColor else primaryColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            "${(if (state.isMuted) 0f else state.volume * 100).toInt()}%",
-                            color = textPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        GlassProgressBar(
-                            progress = if (state.isMuted) 0f else state.volume,
-                            color = primaryColor,
-                            modifier = Modifier.width(50.dp)
-                        )
-                    }
-                }
-            }
-
-            // Brightness Control
+            // Brightness drag zone (Right)
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(if (isLandscape) 100.dp else 80.dp)
+                    .width(if (isLandscape) 130.dp else 110.dp)
                     .align(Alignment.CenterEnd)
-                    .pointerInput(Unit) {
+                    .pointerInput(state.isScreenLocked) {
+                        if (state.isScreenLocked) return@pointerInput
                         detectDragGestures(
                             onDragStart = { _ ->
-                                if (!state.isScreenLocked && !showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
+                                if (!showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
                                     isDraggingBrightness = true
                                     dragStartBrightness = state.brightness
                                     showBrightnessIndicator = true
                                     isControlsVisible = true
                                 }
                             },
-                            onDrag = { _, dragAmount ->
-                                if (!state.isScreenLocked && !showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
-                                    val dragDelta = -dragAmount.y / (size.height / 1.5f)
-                                    val newB = (dragStartBrightness + dragDelta).coerceIn(0f, 1f)
-                                    viewModel.setBrightness(newB)
-                                    dragStartBrightness = newB
+                            onDrag = { _, drag ->
+                                if (!showMoreMenu && !isCapturingScreenshot && !isTransitioning) {
+                                    val nb = (dragStartBrightness + (-drag.y / (size.height / 1.6f)))
+                                        .coerceIn(0f, 1f)
+                                    viewModel.setBrightness(nb)
+                                    dragStartBrightness = nb
                                     showBrightnessIndicator = true
                                 }
                             },
-                            onDragEnd = {
-                                isDraggingBrightness = false
-                                scope.launch {
-                                    delay(1500); if (!isDraggingBrightness) showBrightnessIndicator =
-                                    false
-                                }
-                            },
-                            onDragCancel = {
-                                isDraggingBrightness = false; showBrightnessIndicator = false
-                            }
+                            onDragEnd = { isDraggingBrightness = false; showBrightnessIndicator = false },
+                            onDragCancel = { isDraggingBrightness = false; showBrightnessIndicator = false }
                         )
                     }
             )
 
-            // Brightness Vertical Slider
+            // Brightness Slider → Middle Right
             GlassVerticalSlider(
                 value = state.brightness,
-                onValueChange = { newB -> viewModel.setBrightness(newB) },
+                onValueChange = { viewModel.setBrightness(it) },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 80.dp),
+                    .fillMaxHeight(),   // ← add this
                 color = amberDot,
                 label = "Brightness",
                 isVisible = showBrightnessIndicator && isDraggingBrightness
             )
 
-            // Brightness Compact Indicator
-            AnimatedVisibility(
-                visible = showBrightnessIndicator && !isDraggingBrightness,
-                enter = GlassAnimations.IndicatorEnter, exit = GlassAnimations.IndicatorExit,
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(end = 24.dp)
-                        .size(80.dp)
-                        .glass(cornerRadius = 20.dp, bgAlpha = 0.72f)
-                        .padding(12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.BrightnessHigh,
-                            null,
-                            tint = amberDot,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            "${(state.brightness * 100).toInt()}%",
-                            color = textPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        GlassProgressBar(
-                            progress = state.brightness,
-                            color = amberDot,
-                            modifier = Modifier.width(50.dp)
-                        )
-                    }
-                }
-            }
 
-            // Screenshot toast
             AnimatedVisibility(
                 visible = showScreenshotMessage,
-                enter = GlassAnimations.ToastEnter, exit = GlassAnimations.ToastExit,
+                enter = GlassAnimations.ToastEnter,
+                exit = GlassAnimations.ToastExit,
                 modifier = Modifier.align(Alignment.TopCenter)
             ) {
                 Row(
@@ -1021,46 +911,20 @@ fun ExoPlayerScreen(
                 }
             }
 
-            // Lock screen overlay
+            // ── SCREEN LOCK OVERLAY ───────────────────────────────────────────
             AnimatedVisibility(
                 visible = state.isScreenLocked,
-                enter = GlassAnimations.OverlayEnter, exit = GlassAnimations.OverlayExit
+                enter = fadeIn(tween(300)),
+                exit = fadeOut(tween(200))
             ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(.55f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(88.dp)
-                                .glass(cornerRadius = 44.dp, bgAlpha = 0.60f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Lock,
-                                null,
-                                tint = textPrimary,
-                                modifier = Modifier.size(38.dp)
-                            )
-                        }
-                        Text(
-                            "Screen Locked",
-                            color = textPrimary,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text("Double tap to unlock", color = textSecondary, fontSize = 14.sp)
+                ScreenLockedOverlay(
+                    onUnlock = {
+                        viewModel.toggleScreenLock()
+                        isControlsVisible = true
                     }
-                }
+                )
             }
 
-            // Sleep timer pill
             AnimatedVisibility(
                 visible = state.sleepTimerActive,
                 enter = fadeIn(tween(300)) + scaleIn(
@@ -1082,8 +946,7 @@ fun ExoPlayerScreen(
                         null,
                         tint = primaryColor,
                         modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(5.dp))
+                    ); Spacer(Modifier.width(5.dp))
                     Text(
                         viewModel.getSleepTimerRemainingTime(),
                         color = textPrimary,
@@ -1093,7 +956,6 @@ fun ExoPlayerScreen(
                 }
             }
 
-            // Speed badge
             SpeedGestureBadge(
                 visible = speedBadgeVisible,
                 boostSpeed = speedBoostValue,
@@ -1102,7 +964,7 @@ fun ExoPlayerScreen(
                 modifier = Modifier.align(Alignment.TopCenter)
             )
 
-            // Seek ripple overlays
+            // Seek ripples
             key(seekTrigger?.id to SeekSide.LEFT) {
                 SeekRippleOverlay(
                     side = if (seekTrigger?.side == SeekSide.LEFT) SeekSide.LEFT else SeekSide.NONE,
@@ -1128,16 +990,17 @@ fun ExoPlayerScreen(
                 )
             }
 
-            // ── MAIN CONTROLS OVERLAY ─────────────────────────────────────────
+            // Controls overlay (hidden when screen is locked)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = controlsAlpha }) {
 
-                // Top Bar
+                // Top bar
                 AnimatedVisibility(
                     visible = (isControlsVisible && !state.isScreenLocked) || showMoreMenu,
-                    enter = GlassAnimations.TopBarEnter, exit = GlassAnimations.TopBarExit,
+                    enter = GlassAnimations.TopBarEnter,
+                    exit = GlassAnimations.TopBarExit,
                     modifier = Modifier.align(Alignment.TopCenter)
                 ) {
                     Row(
@@ -1150,7 +1013,6 @@ fun ExoPlayerScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Combined Back + Title Pill
                         Row(
                             modifier = Modifier
                                 .weight(1f, fill = false)
@@ -1162,7 +1024,6 @@ fun ExoPlayerScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Back button inside the pill
                             Box(
                                 modifier = Modifier
                                     .size(if (isLandscape) 28.dp else 24.dp)
@@ -1177,8 +1038,6 @@ fun ExoPlayerScreen(
                                     modifier = Modifier.size(if (isLandscape) 18.dp else 16.dp)
                                 )
                             }
-
-                            // Index badge (if playlist not empty)
                             if (playlist.isNotEmpty()) {
                                 Box(
                                     modifier = Modifier
@@ -1186,10 +1045,12 @@ fun ExoPlayerScreen(
                                         .clip(CircleShape)
                                         .background(
                                             Brush.linearGradient(
-                                                listOf(primaryColor, secondaryColor)
+                                                listOf(
+                                                    primaryColor,
+                                                    secondaryColor
+                                                )
                                             )
-                                        ),
-                                    contentAlignment = Alignment.Center
+                                        ), contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         "${currentIndex + 1}",
@@ -1199,8 +1060,6 @@ fun ExoPlayerScreen(
                                     )
                                 }
                             }
-
-                            // Title text
                             Text(
                                 text = state.currentVideo?.name ?: "",
                                 color = textPrimary,
@@ -1210,24 +1069,16 @@ fun ExoPlayerScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
                             )
-
-                            // Optional: total count badge on the right edge
-                            if (playlist.isNotEmpty()) {
-                                Text(
-                                    "/${playlist.size}",
-                                    color = textSecondary,
-                                    fontSize = if (isLandscape) 12.sp else 11.sp,
-                                    fontWeight = FontWeight.Normal
-                                )
-                            }
+                            if (playlist.isNotEmpty()) Text(
+                                "/${playlist.size}",
+                                color = textSecondary,
+                                fontSize = if (isLandscape) 12.sp else 11.sp
+                            )
                         }
-
-                        // Right action buttons
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(if (isLandscape) 8.dp else 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // PiP button
                             Box(
                                 modifier = Modifier
                                     .size(if (isLandscape) 40.dp else 32.dp)
@@ -1244,7 +1095,6 @@ fun ExoPlayerScreen(
                                     modifier = Modifier.size(if (isLandscape) 20.dp else 16.dp)
                                 )
                             }
-                            // Bookmark button
                             Box(
                                 modifier = Modifier
                                     .size(if (isLandscape) 40.dp else 32.dp)
@@ -1256,24 +1106,23 @@ fun ExoPlayerScreen(
                                         CircleShape
                                     )
                                     .clickable {
-                                        val pos = ExoPlayerManager.getCurrentPosition()
-                                        viewModel.addBookmark(pos)
-                                        Toast.makeText(
-                                            context,
-                                            "Bookmark added at ${formatDuration(pos)}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    },
-                                contentAlignment = Alignment.Center
+                                        val pos =
+                                            ExoPlayerManager.getCurrentPosition(); viewModel.addBookmark(
+                                        pos
+                                    ); Toast.makeText(
+                                        context,
+                                        "Bookmark added at ${formatDuration(pos)}",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    }, contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     if (hasBookmarks) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                    "Add bookmark",
+                                    "Bookmark",
                                     tint = if (hasBookmarks) primaryColor else textPrimary,
                                     modifier = Modifier.size(if (isLandscape) 20.dp else 16.dp)
                                 )
                             }
-                            // More menu button
                             Box {
                                 Box(
                                     modifier = Modifier
@@ -1289,8 +1138,7 @@ fun ExoPlayerScreen(
                                             showMoreMenu =
                                                 !showMoreMenu; if (showMoreMenu) isControlsVisible =
                                             true
-                                        },
-                                    contentAlignment = Alignment.Center
+                                        }, contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         Icons.Default.MoreVert,
@@ -1331,10 +1179,7 @@ fun ExoPlayerScreen(
                                                 fontSize = 14.sp
                                             )
                                         },
-                                        onClick = {
-                                            showSubtitleMenu = true
-                                            showMoreMenu = false
-                                        },
+                                        onClick = { showSubtitleMenu = true; showMoreMenu = false },
                                         leadingIcon = {
                                             Icon(
                                                 Icons.Outlined.Subtitles,
@@ -1482,7 +1327,7 @@ fun ExoPlayerScreen(
                     }
                 }
 
-                // Center playback controls
+                // Center controls
                 AnimatedVisibility(
                     visible = isControlsVisible && !state.isScreenLocked,
                     enter = GlassAnimations.CenterControlsEnter,
@@ -1494,17 +1339,13 @@ fun ExoPlayerScreen(
                         Arrangement.Center,
                         Alignment.CenterVertically
                     ) {
-                        // Previous Button - DISABLED when no previous video
                         GlassPlayerButton(
                             icon = Icons.Default.SkipPrevious,
                             enabled = hasPrevious && !isTransitioning,
                             size = 42.dp,
                             tint = if (hasPrevious && !isTransitioning) textPrimary else textTertiary
                         ) { performSmoothPrevious() }
-
                         Spacer(Modifier.width(12.dp))
-
-                        // Rewind Button
                         GlassPlayerButton(
                             icon = Icons.Default.FastRewind,
                             enabled = true,
@@ -1512,26 +1353,21 @@ fun ExoPlayerScreen(
                             label = "10",
                             tint = textPrimary
                         ) {
-                            val newPos =
-                                (ExoPlayerManager.getCurrentPosition() - 10000).coerceAtLeast(0)
-                            ExoPlayerManager.seekTo(newPos)
-                            viewModel.updatePlaybackState(currentPosition = newPos)
+                            val np =
+                                (ExoPlayerManager.getCurrentPosition() - 10000).coerceAtLeast(0); ExoPlayerManager.seekTo(
+                            np
+                        ); viewModel.updatePlaybackState(currentPosition = np)
                         }
-
                         Spacer(Modifier.width(16.dp))
-
-                        // Play/Pause Button
                         Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-                            if (state.isPlaying) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .graphicsLayer { scaleX = glowScale; scaleY = glowScale }
-                                        .clip(CircleShape)
-                                        .background(primaryColor.copy(alpha = glowAlpha * 0.4f))
-                                        .blur(14.dp)
-                                )
-                            }
+                            if (state.isPlaying) Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .graphicsLayer { scaleX = glowScale; scaleY = glowScale }
+                                    .clip(CircleShape)
+                                    .background(primaryColor.copy(alpha = glowAlpha * 0.4f))
+                                    .blur(14.dp)
+                            )
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -1555,10 +1391,10 @@ fun ExoPlayerScreen(
                                         shape = CircleShape
                                     )
                                     .clickable {
-                                        val newPlaying = !state.isPlaying
-                                        if (newPlaying) ExoPlayerManager.play() else ExoPlayerManager.pause()
-                                        viewModel.updatePlaybackState(isPlaying = newPlaying)
-                                        onPlayPause()
+                                        val np =
+                                            !state.isPlaying; if (np) ExoPlayerManager.play() else ExoPlayerManager.pause(); viewModel.updatePlaybackState(
+                                        isPlaying = np
+                                    ); onPlayPause()
                                     }, contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -1569,10 +1405,7 @@ fun ExoPlayerScreen(
                                 )
                             }
                         }
-
                         Spacer(Modifier.width(16.dp))
-
-                        // Fast Forward Button
                         GlassPlayerButton(
                             icon = Icons.Default.FastForward,
                             enabled = true,
@@ -1580,15 +1413,12 @@ fun ExoPlayerScreen(
                             label = "10",
                             tint = textPrimary
                         ) {
-                            val newPos =
-                                (ExoPlayerManager.getCurrentPosition() + 10000).coerceAtMost(state.duration)
-                            ExoPlayerManager.seekTo(newPos)
-                            viewModel.updatePlaybackState(currentPosition = newPos)
+                            val np =
+                                (ExoPlayerManager.getCurrentPosition() + 10000).coerceAtMost(state.duration); ExoPlayerManager.seekTo(
+                            np
+                        ); viewModel.updatePlaybackState(currentPosition = np)
                         }
-
                         Spacer(Modifier.width(12.dp))
-
-                        // Next Button - DISABLED when no next video
                         GlassPlayerButton(
                             icon = Icons.Default.SkipNext,
                             enabled = hasNext && !isTransitioning,
@@ -1601,7 +1431,8 @@ fun ExoPlayerScreen(
                 // Bottom bar
                 AnimatedVisibility(
                     visible = (isControlsVisible && !state.isScreenLocked) || showMoreMenu,
-                    enter = GlassAnimations.PanelEnter, exit = GlassAnimations.PanelExit,
+                    enter = GlassAnimations.PanelEnter,
+                    exit = GlassAnimations.PanelExit,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
                     Column(
@@ -1636,9 +1467,7 @@ fun ExoPlayerScreen(
                             visible = showSleepTimerMenu,
                             enter = GlassAnimations.SubMenuEnter,
                             exit = GlassAnimations.SubMenuExit
-                        ) {
-                            DynamicSleepTimerMenu(viewModel) { showSleepTimerMenu = false }
-                        }
+                        ) { DynamicSleepTimerMenu(viewModel) { showSleepTimerMenu = false } }
                         AnimatedVisibility(
                             visible = showSubtitleMenu,
                             enter = GlassAnimations.SubMenuEnter,
@@ -1647,23 +1476,21 @@ fun ExoPlayerScreen(
                             DynamicSubtitleMenu(
                                 tracks = state.availableSubtitleTracks,
                                 selectedTrack = state.selectedSubtitleTrack,
-                                onTrackSelected = { track ->
-                                    viewModel.selectSubtitleTrack(track)
-                                    showSubtitleMenu = false
+                                onTrackSelected = { t ->
+                                    viewModel.selectSubtitleTrack(t); showSubtitleMenu = false
                                 },
                                 onDisable = {
-                                    viewModel.selectSubtitleTrack(null)
-                                    showSubtitleMenu = false
+                                    viewModel.selectSubtitleTrack(null); showSubtitleMenu = false
                                 },
+                                onLoadExternal = { subtitlePickerLauncher.launch(arrayOf("*/*")) },  // 👈 new
                                 onDismiss = { showSubtitleMenu = false }
                             )
                         }
 
-                        // Bottom Controls Row (with horizontal slide animation)
                         AnimatedVisibility(
                             visible = showBottomControls,
-                            enter = bottomRowSlideIn,
-                            exit = bottomRowSlideOut
+                            enter = bottomRowEnter,
+                            exit = bottomRowExit
                         ) {
                             Row(
                                 Modifier.fillMaxWidth(),
@@ -1680,9 +1507,8 @@ fun ExoPlayerScreen(
                                         bgAlpha = if (state.isMuted) 0.30f else 0.12f,
                                         size = 32.dp
                                     ) {
-                                        viewModel.toggleMute()
-                                        ExoPlayerManager.setVolume(if (!state.isMuted) 0f else state.volume)
-                                        showVolumeIndicator = true
+                                        viewModel.toggleMute(); ExoPlayerManager.setVolume(if (!state.isMuted) 0f else state.volume); showVolumeIndicator =
+                                        true
                                     }
                                     GlassControlChip(
                                         icon = Icons.Default.BrightnessHigh,
@@ -1709,56 +1535,44 @@ fun ExoPlayerScreen(
                                         icon = Icons.Default.VisibilityOff,
                                         tint = textPrimary,
                                         size = 32.dp
-                                    ) { showBottomControls = false }  // Hide button
+                                    ) { showBottomControls = false }
                                 }
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (playlist.isNotEmpty() && currentIndex >= 0) {
-                                        Row(
-                                            modifier = Modifier
-                                                .glassPill()
-                                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.AutoMirrored.Outlined.PlaylistPlay,
-                                                null,
-                                                tint = textPrimary,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Spacer(Modifier.width(3.dp))
-                                            Text(
-                                                "${currentIndex + 1}/${playlist.size}",
-                                                color = textPrimary,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
+                                if (playlist.isNotEmpty() && currentIndex >= 0) {
+                                    Row(
+                                        modifier = Modifier
+                                            .glassPill()
+                                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.AutoMirrored.Outlined.PlaylistPlay,
+                                            null,
+                                            tint = textPrimary,
+                                            modifier = Modifier.size(12.dp)
+                                        ); Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            "${currentIndex + 1}/${playlist.size}",
+                                            color = textPrimary,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
                                     }
                                 }
                             }
                         }
 
-                        // Show controls button (appears when bottom row is hidden)
                         AnimatedVisibility(
                             visible = !showBottomControls,
-                            enter = slideInHorizontally(
-                                initialOffsetX = { it },
-                                animationSpec = tween(250, easing = FastOutSlowInEasing)
-                            ) + fadeIn(tween(150)),
-                            exit = slideOutHorizontally(
-                                targetOffsetX = { it },
-                                animationSpec = tween(200, easing = FastOutSlowInEasing)
-                            ) + fadeOut(tween(100)),
+                            enter = restoreBtnEnter,
+                            exit = restoreBtnExit,
                             modifier = Modifier.align(Alignment.End)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .padding(end = 16.dp, bottom = 8.dp)
-                                    .size(44.dp)
-                                    .glass(cornerRadius = 22.dp, bgAlpha = 0.65f)
+                                    .padding(end = 4.dp, bottom = 6.dp)
+                                    .size(40.dp)
+                                    .glass(cornerRadius = 20.dp, bgAlpha = 0.72f)
+                                    .border(1.dp, primaryColor.copy(0.40f), CircleShape)
                                     .clickable { showBottomControls = true },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1766,7 +1580,7 @@ fun ExoPlayerScreen(
                                     Icons.Default.Visibility,
                                     "Show controls",
                                     tint = textPrimary,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -1776,12 +1590,11 @@ fun ExoPlayerScreen(
                         YouTubeStyleBottomBar(
                             currentPosition = if (isSeeking) seekPosition else state.currentPosition,
                             duration = state.duration,
-                            onSeek = { position ->
-                                isSeeking = true
-                                seekPosition = position
-                                ExoPlayerManager.seekTo(position)
-                                viewModel.updatePlaybackState(currentPosition = position)
-                                scope.launch { delay(100); isSeeking = false }
+                            onSeek = { pos ->
+                                isSeeking = true; seekPosition =
+                                pos; ExoPlayerManager.seekTo(pos); viewModel.updatePlaybackState(
+                                currentPosition = pos
+                            ); scope.launch { delay(100); isSeeking = false }
                             },
                             onFullscreenToggle = { viewModel.toggleFullScreen() },
                             isFullscreen = state.isFullScreen,
@@ -1800,7 +1613,7 @@ fun ExoPlayerScreen(
                 }
             }
 
-            // Suggestions row
+            // Suggestions
             if (showSuggestions && playlist.isNotEmpty() && !state.isScreenLocked && !isTransitioning) {
                 AnimatedVisibility(
                     visible = showSuggestions,
@@ -1840,12 +1653,11 @@ fun ExoPlayerScreen(
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         letterSpacing = 0.5.sp
-                                    )
-                                    Text(
-                                        "${playlist.size} videos",
-                                        color = textSecondary,
-                                        fontSize = 10.sp
-                                    )
+                                    ); Text(
+                                    "${playlist.size} videos",
+                                    color = textSecondary,
+                                    fontSize = 10.sp
+                                )
                                 }
                             }
                             Box(
@@ -1872,35 +1684,29 @@ fun ExoPlayerScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             contentPadding = PaddingValues(horizontal = 16.dp)
                         ) {
-                            items(playlist, key = { it.id }) { suggestionVideo ->
+                            items(playlist, key = { it.id }) { sv ->
                                 EnhancedSuggestionItem(
-                                    video = suggestionVideo,
-                                    isCurrentVideo = suggestionVideo.id == state.currentVideo?.id,
+                                    video = sv,
+                                    isCurrentVideo = sv.id == state.currentVideo?.id,
                                     onPlay = {
-                                        if (!isTransitioning && suggestionVideo.id != state.currentVideo?.id) {
-                                            val newIndex =
-                                                playlist.indexOfFirst { it.id == suggestionVideo.id }
-                                            if (newIndex == -1) return@EnhancedSuggestionItem
-                                            isTransitioning = true
-                                            ExoPlayerManager.pause()
-                                            ExoPlayerManager.resetForNewVideo()
+                                        if (!isTransitioning && sv.id != state.currentVideo?.id) {
+                                            val ni =
+                                                playlist.indexOfFirst { it.id == sv.id }; if (ni == -1) return@EnhancedSuggestionItem
+                                            isTransitioning =
+                                                true; ExoPlayerManager.pause(); ExoPlayerManager.resetForNewVideo()
                                             scope.launch {
-                                                delay(150)
-                                                viewModel.setCurrentVideo(suggestionVideo, newIndex)
-                                                viewModel.clearBookmarks()
-                                                ExoPlayerManager.prepareVideo(
-                                                    uri = suggestionVideo.uri.toString(),
-                                                    startPosition = 0L,
-                                                    shouldPlay = true
-                                                )
-                                                viewModel.updatePlaybackState(isPlaying = true)
-                                                if (!isPlaying) onPlayPause()
-                                                showSuggestions = false
-                                                isTransitioning = false
+                                                delay(150); viewModel.setCurrentVideo(
+                                                sv,
+                                                ni
+                                            ); viewModel.clearBookmarks(); ExoPlayerManager.prepareVideo(
+                                                uri = sv.uri.toString(),
+                                                startPosition = 0L,
+                                                shouldPlay = true
+                                            ); viewModel.updatePlaybackState(isPlaying = true); if (!isPlaying) onPlayPause(); showSuggestions =
+                                                false; isTransitioning = false
                                             }
                                         }
-                                    }
-                                )
+                                    })
                             }
                         }
                         Spacer(Modifier.height(4.dp))
@@ -1908,23 +1714,18 @@ fun ExoPlayerScreen(
                 }
             }
 
-            // Overlay panels
             AnimatedVisibility(
                 visible = showVideoAdjustments && !state.isScreenLocked,
                 enter = GlassAnimations.PanelEnter,
                 exit = GlassAnimations.PanelExit,
                 modifier = Modifier.align(Alignment.BottomCenter)
-            ) {
-                DynamicVideoAdjustmentsPanel(viewModel, state) { showVideoAdjustments = false }
-            }
+            ) { DynamicVideoAdjustmentsPanel(viewModel, state) { showVideoAdjustments = false } }
             AnimatedVisibility(
                 visible = showAdvancedMenu && !state.isScreenLocked,
                 enter = GlassAnimations.PanelEnter,
                 exit = GlassAnimations.PanelExit,
                 modifier = Modifier.align(Alignment.BottomCenter)
-            ) {
-                DynamicAdvancedControlsPanel(viewModel, state) { showAdvancedMenu = false }
-            }
+            ) { DynamicAdvancedControlsPanel(viewModel, state) { showAdvancedMenu = false } }
             AnimatedVisibility(
                 visible = showEqualizerPanel && !state.isScreenLocked,
                 enter = GlassAnimations.PanelEnter,
@@ -1950,48 +1751,472 @@ fun ExoPlayerScreen(
                     thumbnailBitmap
                 ) { showVideoInfo = false }
             }
+        }
+    }
+}
 
-            // Unlock button
-            AnimatedVisibility(
-                visible = state.isScreenLocked,
-                enter = fadeIn(tween(250)) + scaleIn(
-                    initialScale = 0.6f,
-                    animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium)
+@Composable
+private fun ScreenLockedOverlay(onUnlock: () -> Unit) {
+    var showSlider by remember { mutableStateOf(true) }
+
+    LaunchedEffect(showSlider) {
+        if (showSlider) {
+            delay(3000)
+            showSlider = false
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { showSlider = true })
+            }
+    ) {
+        AnimatedVisibility(
+            visible = showSlider,
+            enter = slideInVertically(
+                initialOffsetY = { it / 2 },
+                animationSpec = tween(280, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(260)),
+            exit = slideOutVertically(
+                targetOffsetY = { it / 2 },
+                animationSpec = tween(220)
+            ) + fadeOut(tween(180)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            SlideToUnlock(
+                onUnlock = onUnlock,
+                modifier = Modifier.padding(bottom = 48.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun SlideToUnlock(
+    onUnlock: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val textPrimary = GlassTokens.getTextPrimary()
+
+    val sliderProgress = remember { Animatable(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+    var isUnlocked by remember { mutableStateOf(false) }
+    var showSuccess by remember { mutableStateOf(false) }
+
+    // Pulsing chevron animation
+    val infiniteTransition = rememberInfiniteTransition(label = "chevron")
+    val chevronAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "chevAlpha"
+    )
+
+    // Thumb fill color interpolates primary → bright as progress increases
+    val thumbColor by animateColorAsState(
+        targetValue = if (isUnlocked) primaryColor
+        else primaryColor.copy(alpha = 0.85f + sliderProgress.value * 0.15f),
+        animationSpec = tween(200),
+        label = "thumbColor"
+    )
+
+    // Success ring scale
+    val ringScale by animateFloatAsState(
+        targetValue = if (showSuccess) 1f else 0.88f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        label = "ringScale"
+    )
+    val ringAlpha by animateFloatAsState(
+        targetValue = if (showSuccess) 0.7f else 0f,
+        animationSpec = tween(300),
+        label = "ringAlpha"
+    )
+
+    // Track label fades out as thumb moves right
+    val labelAlpha = (1f - sliderProgress.value * 2.8f).coerceIn(0f, 1f)
+
+    // Auto-reset if released without unlocking
+    LaunchedEffect(isDragging, isUnlocked) {
+        if (!isDragging && !isUnlocked && sliderProgress.value > 0.04f) {
+            delay(600)
+            if (!isDragging && !isUnlocked) {
+                sliderProgress.animateTo(
+                    0f,
+                    spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)
+                )
+            }
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .width(300.dp)
+            .height(64.dp)
+    ) {
+        val trackWidthPx = constraints.maxWidth.toFloat()
+        val thumbDp = 56.dp
+        val thumbPx = with(density) { thumbDp.toPx() }
+        val padPx = with(density) { 4.dp.toPx() }
+        val maxOffsetPx = trackWidthPx - thumbPx - padPx * 2
+
+        // Outer track surface — M3 surface variant
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(32.dp))
+                .background(surfaceVariant.copy(alpha = 0.45f))
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        listOf(
+                            Color.White.copy(0.18f),
+                            Color.White.copy(0.06f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(32.dp)
+                )
+        )
+
+        // Success ring pulse
+        if (showSuccess) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { scaleX = ringScale; scaleY = ringScale; alpha = ringAlpha }
+                    .border(2.dp, primaryColor, RoundedCornerShape(32.dp))
+            )
+        }
+
+        // Progress fill
+        val fillWidth = ((sliderProgress.value * maxOffsetPx + thumbPx + padPx * 2) / trackWidthPx)
+            .coerceIn(0f, 1f)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(fillWidth)
+                .clip(RoundedCornerShape(32.dp))
+                .background(primaryColor.copy(alpha = 0.18f))
+        )
+
+        // Track label — chevrons + text
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = labelAlpha }
+                .padding(start = 72.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Three animated chevrons
+            repeat(3) { i ->
+                val individualAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.15f,
+                    targetValue = 0.65f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(900, delayMillis = i * 160, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "chev$i"
+                )
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = textPrimary.copy(alpha = individualAlpha),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Text(
+                text = "Slide to unlock",
+                color = textPrimary.copy(alpha = 0.5f),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.25.sp
+            )
+        }
+
+        // Thumb
+        val thumbOffset = (sliderProgress.value * maxOffsetPx + padPx).coerceIn(padPx, padPx + maxOffsetPx)
+        Box(
+            modifier = Modifier
+                .padding(vertical = 4.dp)
+                .offset { IntOffset(thumbOffset.toInt(), 0) }
+                .size(thumbDp, 56.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(thumbColor)
+                .border(
+                    width = 1.5.dp,
+                    brush = Brush.linearGradient(
+                        listOf(Color.White.copy(0.35f), Color.White.copy(0.08f))
+                    ),
+                    shape = RoundedCornerShape(28.dp)
                 ),
-                exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.6f),
-                modifier = Modifier.align(Alignment.BottomCenter)
-            ) {
+            contentAlignment = Alignment.Center
+        ) {
+            // State layer ripple on press
+            if (isDragging) {
                 Box(
                     modifier = Modifier
-                        .padding(bottom = 30.dp)
-                        .size(54.dp)
-                        .glass(cornerRadius = 27.dp, bgAlpha = 0.55f, borderTopAlpha = 0.35f)
-                        .clickable { viewModel.toggleScreenLock(); isControlsVisible = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.LockOpen,
-                        "Unlock",
-                        tint = textPrimary,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-            }
-
-            if (state.isScreenLocked) {
-                Box(
-                    Modifier
                         .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures(onDoubleTap = {
-                                viewModel.toggleScreenLock(); isControlsVisible = true
-                            })
-                        })
+                        .background(Color.Black.copy(0.10f))
+                )
+            }
+            if (isUnlocked) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = null,
+                    tint = onPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+            } else {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = onPrimary,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .graphicsLayer {
+                            // Subtle icon shift as thumb moves
+                            translationX = sliderProgress.value * 4f
+                        }
+                )
+            }
+        }
+
+        // Drag detector
+        if (!isUnlocked) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = {
+                                isDragging = true
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                scope.launch { sliderProgress.stop() }
+                            },
+                            onDrag = { change, drag ->
+                                change.consume()
+                                val delta = drag.x / maxOffsetPx
+                                val next = (sliderProgress.value + delta).coerceIn(0f, 1f)
+                                scope.launch { sliderProgress.snapTo(next) }
+                                if (next > 0.5f && sliderProgress.value <= 0.5f) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                            },
+                            onDragEnd = {
+                                isDragging = false
+                                if (sliderProgress.value >= 0.85f) {
+                                    scope.launch {
+                                        sliderProgress.animateTo(1f, tween(160))
+                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        isUnlocked = true
+                                        showSuccess = true
+                                        delay(200)
+                                        onUnlock()
+                                    }
+                                } else {
+                                    scope.launch {
+                                        sliderProgress.animateTo(
+                                            0f,
+                                            spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)
+                                        )
+                                    }
+                                }
+                            },
+                            onDragCancel = {
+                                isDragging = false
+                                scope.launch { sliderProgress.animateTo(0f, tween(260)) }
+                            }
+                        )
+                    }
+            )
+        }
+    }
+}
+
+@Composable
+private fun GlassVerticalSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    color: Color,
+    label: String,
+    isVisible: Boolean
+) {
+    val textPrimary = GlassTokens.getTextPrimary()
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.92f),
+        exit = fadeOut(tween(160)) + scaleOut(targetScale = 0.92f),
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .width(82.dp)
+                .height(260.dp)           // ← Fixed height (standard for video players)
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Icon
+                Icon(
+                    when (label) {
+                        "Volume" -> if (value <= 0.05f) Icons.AutoMirrored.Filled.VolumeOff
+                        else Icons.AutoMirrored.Filled.VolumeUp
+                        else -> Icons.Default.BrightnessHigh
+                    },
+                    contentDescription = label,
+                    tint = color,
+                    modifier = Modifier.size(26.dp)
+                )
+
+                // Slider Track + Thumb
+                Box(
+                    modifier = Modifier
+                        .width(42.dp)
+                        .height(190.dp)                    // Fixed track height
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Color.White.copy(alpha = 0.14f))
+                        .border(
+                            width = 1.5.dp,
+                            color = Color.White.copy(alpha = 0.28f),
+                            shape = RoundedCornerShape(28.dp)
+                        )
+                ) {
+                    // Filled progress
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(value)
+                            .align(Alignment.BottomCenter)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        color.copy(0.95f),
+                                        color
+                                    )
+                                )
+                            )
+                    )
+
+                    // Thumb with glow + shadow
+                    val thumbOffset = (1f - value) * 190.dp
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .offset(y = thumbOffset - 18.dp)   // Center thumb on track
+                            .align(Alignment.TopCenter)
+                            .shadow(10.dp, CircleShape, spotColor = color.copy(0.6f))
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .border(3.dp, color, CircleShape)
+                            .pointerInput(Unit) {
+                                detectDragGestures(
+                                    onDrag = { _, dragAmount ->
+                                        val delta = -dragAmount.y / 190f   // 190 = track height in dp
+                                        val newValue = (value + delta).coerceIn(0f, 1f)
+                                        onValueChange(newValue)
+                                    }
+                                )
+                            }
+                    ) {
+                        // Inner glow dot
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .align(Alignment.Center)
+                                .clip(CircleShape)
+                                .background(color.copy(0.9f))
+                        )
+                    }
+                }
+
+                // Percentage Text
+                Text(
+                    "${(value * 100).toInt()}%",
+                    color = textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
         }
     }
 }
 
+
+@Composable
+private fun GlassPlayerButton(
+    icon: ImageVector,
+    enabled: Boolean,
+    size: Dp,
+    tint: Color,
+    label: String? = null,
+    onClick: () -> Unit
+) {
+    val chipBg = GlassTokens.getChipBg()
+    val chipBorder = GlassTokens.getChipBorder()
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(chipBg.copy(if (enabled) 0.18f else 0.06f))
+            .border(1.dp, chipBorder.copy(if (enabled) 1f else 0.4f), CircleShape)
+            .clickable(enabled = enabled) { onClick() }, contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(size * 0.55f))
+        if (label != null) Text(
+            label,
+            color = tint,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 3.dp)
+        )
+    }
+}
+
+@Composable
+private fun GlassControlChip(
+    icon: ImageVector,
+    tint: Color,
+    bgAlpha: Float = 0.12f,
+    size: Dp = 32.dp,
+    onClick: () -> Unit
+) {
+    val chipBg = GlassTokens.getChipBg()
+    val chipBorder = GlassTokens.getChipBorder()
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(chipBg.copy(bgAlpha))
+            .border(1.dp, chipBorder, CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(size * 0.55f))
+    }
+}
 
 
 @Composable
@@ -2000,6 +2225,7 @@ fun DynamicSubtitleMenu(
     selectedTrack: SubtitleTrack?,
     onTrackSelected: (SubtitleTrack) -> Unit,
     onDisable: () -> Unit,
+    onLoadExternal: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
@@ -2109,152 +2335,39 @@ fun DynamicSubtitleMenu(
                 Spacer(Modifier.height(6.dp))
             }
         }
-    }
-}
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = chipBorder)
 
-
-@Composable
-private fun GlassVerticalSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-    color: Color,
-    label: String,
-    isVisible: Boolean
-) {
-    val density = LocalDensity.current
-    val textPrimary = GlassTokens.getTextPrimary()
-
-    AnimatedVisibility(
-        visible = isVisible,
-        enter = fadeIn(tween(200)) + scaleIn(initialScale = 0.8f),
-        exit = fadeOut(tween(150)) + scaleOut(targetScale = 0.8f)
-    ) {
-        Box(
-            modifier = modifier
-                .size(60.dp, 180.dp)
-                .glass(cornerRadius = 24.dp, bgAlpha = 0.85f)
-                .padding(12.dp),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(chipBg.copy(alpha = 0.30f))
+                .border(1.dp, chipBorder, RoundedCornerShape(10.dp))
+                .clickable { onLoadExternal() }
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    if (label == "Volume") {
-                        if (value == 0f) Icons.AutoMirrored.Filled.VolumeOff
-                        else Icons.AutoMirrored.Filled.VolumeUp
-                    } else Icons.Default.BrightnessHigh,
-                    contentDescription = label,
-                    tint = color,
-                    modifier = Modifier.size(24.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .height(100.dp)
-                        .width(32.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(value)
-                            .align(Alignment.BottomCenter)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(color, color.copy(alpha = 0.7f))
-                                )
-                            )
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .offset(
-                                x = 6.dp,
-                                y = with(density) { ((1f - value) * 100.dp.toPx() - 10.dp.toPx()).toInt().dp }
-                            )
-                            .clip(CircleShape)
-                            .background(Color.White)
-                            .border(2.dp, color, CircleShape)
-                            .shadow(4.dp, CircleShape)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectDragGestures(
-                                    onDrag = { _, dragAmount ->
-                                        val delta = -dragAmount.y / size.height
-                                        val newValue = (value + delta).coerceIn(0f, 1f)
-                                        onValueChange(newValue)
-                                    }
-                                )
-                            }
-                    )
-                }
+            Icon(
+                Icons.Default.Add,
+                null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Column {
                 Text(
-                    "${(value * 100).toInt()}%",
+                    "Load external subtitle",
                     color = textPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "SRT, VTT files",
+                    color = textPrimary,
+                    fontSize = 11.sp
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun GlassProgressBar(progress: Float, color: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .width(72.dp)
-            .height(4.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(Color.White.copy(0.15f))
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth(progress)
-                .fillMaxHeight()
-                .background(Brush.horizontalGradient(listOf(color.copy(0.7f), color)))
-        )
-    }
-}
-
-@Composable
-private fun GlassPlayerButton(
-    icon: ImageVector,
-    enabled: Boolean,
-    size: Dp,
-    tint: Color,
-    label: String? = null,
-    onClick: () -> Unit
-) {
-    val chipBg = GlassTokens.getChipBg()
-    val chipBorder = GlassTokens.getChipBorder()
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(chipBg.copy(if (enabled) 0.18f else 0.06f))
-            .border(1.dp, chipBorder.copy(if (enabled) 1f else 0.4f), CircleShape)
-            .clickable(enabled = enabled) { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(size * 0.55f))
-        if (label != null) {
-            Text(
-                label,
-                color = tint,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 3.dp)
-            )
         }
     }
 }
@@ -2736,28 +2849,6 @@ fun YouTubeStyleBottomBar(
     }
 }
 
-@Composable
-private fun GlassControlChip(
-    icon: ImageVector,
-    tint: Color,
-    bgAlpha: Float = 0.12f,
-    size: Dp = 32.dp,
-    onClick: () -> Unit
-) {
-    val chipBg = GlassTokens.getChipBg()
-    val chipBorder = GlassTokens.getChipBorder()
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(chipBg.copy(bgAlpha))
-            .border(1.dp, chipBorder, CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(size * 0.55f))
-    }
-}
 
 @Composable
 fun DynamicEqualizerPanel(
@@ -3064,8 +3155,6 @@ fun DynamicVideoAdjustmentsPanel(
     onClose: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
-    val textPrimary = GlassTokens.getTextPrimary()
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -3413,4 +3502,8 @@ private fun GlassInfoRow(label: String, value: String, isPath: Boolean = false) 
         Spacer(Modifier.height(4.dp))
     }
 }
+
+
+
+
 
