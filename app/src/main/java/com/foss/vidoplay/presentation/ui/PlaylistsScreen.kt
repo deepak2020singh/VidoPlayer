@@ -1,7 +1,16 @@
 package com.foss.vidoplay.presentation.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +35,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.MoreVert
@@ -37,6 +47,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,16 +71,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.foss.vidoplay.domain.model.Playlist
 import com.foss.vidoplay.domain.model.PlaylistVideo
 import com.foss.vidoplay.presentation.common.GlassTokens
@@ -77,14 +92,15 @@ import com.foss.vidoplay.presentation.common.formatDuration
 import com.foss.vidoplay.presentation.common.glassCard
 import com.foss.vidoplay.presentation.common.glassPanel
 import com.foss.vidoplay.presentation.viewModel.PlaylistViewModel
+import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
-import org.koin.core.context.stopKoin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistsScreen(
     innerPadding: PaddingValues,
     onPlayVideo: (videoId: Long, folderPath: String, startPosition: Long) -> Unit = { _, _, _ -> },
+    onNavigateToStream: () -> Unit,
     viewModel: PlaylistViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -121,13 +137,13 @@ fun PlaylistsScreen(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(RoundedCornerShape(12.dp)),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                            color = primaryColor.copy(alpha = 0.15f)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.AutoMirrored.Outlined.QueueMusic,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = primaryColor,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -136,24 +152,21 @@ fun PlaylistsScreen(
                             "Playlists",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = textPrimary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = if (isDark) Color(0xFF0A0A0A) else Color(0xFFF5F5F5)
                 )
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showCreateDialog = true },
-                containerColor = primaryColor,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Create playlist")
-            }
+            MultiOptionFab(
+                onNavigateToStream = onNavigateToStream,
+                onShowCreateDialog = { showCreateDialog = true },
+                modifier = Modifier.padding(12.dp)
+            )
         },
         containerColor = Color.Transparent
     ) { paddingValues ->
@@ -264,7 +277,7 @@ fun PlaylistsScreen(
         }
     }
 
-    // Dialogs and Bottom Sheet
+    // Dialogs and Bottom Sheet (unchanged)
     if (showCreateDialog) {
         PlaylistDialog(
             playlist = null,
@@ -299,7 +312,12 @@ fun PlaylistsScreen(
                 )
             },
             title = { Text("Delete Playlist", fontWeight = FontWeight.Bold, color = textPrimary) },
-            text = { Text("Delete \"${playlist.name}\"? This cannot be undone.", color = textSecondary) },
+            text = {
+                Text(
+                    "Delete \"${playlist.name}\"? This cannot be undone.",
+                    color = textSecondary
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -329,6 +347,7 @@ fun PlaylistsScreen(
         )
     }
 }
+
 
 @Composable
 fun PlaylistCard(
@@ -428,7 +447,13 @@ fun PlaylistCard(
                     DropdownMenuItem(
                         text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                         onClick = { showMenu = false; onDeleteClick() },
-                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     )
                 }
             }
@@ -775,4 +800,151 @@ fun PlaylistDialog(
         containerColor = if (isDark) Color(0xFF1E2024) else Color(0xFFF8F9FA),
         shape = RoundedCornerShape(20.dp)
     )
+}
+
+
+@Composable
+fun MultiOptionFab(
+    onNavigateToStream: () -> Unit,
+    onShowCreateDialog: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showOptions by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Animation for FAB icon rotation
+    val rotation by animateFloatAsState(
+        targetValue = if (showOptions) 45f else 0f,
+        label = "FAB rotation"
+    )
+
+    // Animation for FAB width (expands to pill shape when options shown)
+    val fabWidth by animateDpAsState(
+        targetValue = if (showOptions) 75.dp else 56.dp,
+        label = "FAB width",
+        animationSpec = tween(durationMillis = 300)
+    )
+
+    val fabRadius = 28.dp
+
+    // Define the two options
+    val options = listOf(
+        Triple(Icons.Default.Add, "Create Playlist", onShowCreateDialog),
+        Triple(Icons.Default.Link, "Stream URL", onNavigateToStream)
+    )
+
+    Column(
+        modifier = modifier
+            .padding(end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        // Options Column (appears above FAB when expanded)
+        AnimatedVisibility(
+            visible = showOptions,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = tween(300)
+            ) + fadeIn(animationSpec = tween(300)),
+            exit = slideOutVertically(
+                targetOffsetY = { it }
+            ) + fadeOut(animationSpec = tween(300))
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                options.forEachIndexed { index, (icon, text, onClick) ->
+                    FabOption(
+                        icon = icon,
+                        text = text,
+                        onClick = {
+                            coroutineScope.launch {
+                                onClick()
+                                showOptions = false
+                            }
+                        },
+                        modifier = Modifier
+                            .shadow(
+                                elevation = 8.dp,
+                                shape = RoundedCornerShape(25.dp),
+                                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            )
+                    )
+                }
+            }
+        }
+
+        // Main FAB at the bottom
+        FloatingActionButton(
+            onClick = { showOptions = !showOptions },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(fabRadius),
+            elevation = FloatingActionButtonDefaults.elevation(
+                defaultElevation = 6.dp,
+                pressedElevation = 12.dp,
+                hoveredElevation = 8.dp
+            ),
+            modifier = Modifier
+                .width(fabWidth)
+                .height(56.dp)
+                .shadow(
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(fabRadius),
+                    ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                )
+        ) {
+            Icon(
+                imageVector = if (showOptions) Icons.Default.Close else Icons.Default.Edit,
+                contentDescription = if (showOptions) "Close menu" else "Create content",
+                modifier = Modifier
+                    .size(24.dp)
+                    .rotate(rotation)
+            )
+        }
+    }
+}
+
+@Composable
+fun FabOption(
+    icon: ImageVector,
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Surface(
+        shape = RoundedCornerShape(25.dp),
+        color = MaterialTheme.colorScheme.primary,
+        tonalElevation = 4.dp, // Material 3 elevation
+        modifier = modifier
+            .clickable(
+                interactionSource = interactionSource,
+                onClick = onClick
+            )
+            .padding(0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = text,
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge, // Material 3 label style
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp
+            )
+        }
+    }
 }
