@@ -54,6 +54,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -1152,25 +1153,8 @@ fun ExoPlayerScreen(
                                     onDismissRequest = { showMoreMenu = false },
                                     modifier = Modifier
                                         .glassPanel(cornerRadius = 16.dp)
-                                        .width(210.dp)
+                                        .width(if (isLandscape) 220.dp else  210.dp)
                                 ) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Audio Track",
-                                                color = textPrimary,
-                                                fontSize = 14.sp
-                                            )
-                                        },
-                                        onClick = { showAudioMenu = true; showMoreMenu = false },
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Outlined.Audiotrack,
-                                                null,
-                                                tint = onSurfaceColor,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        })
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -1448,43 +1432,54 @@ fun ExoPlayerScreen(
                             enter = GlassAnimations.SubMenuEnter,
                             exit = GlassAnimations.SubMenuExit
                         ) {
-                            DynamicAudioMenu(
-                                state.selectedAudioTrack,
-                                { viewModel.setAudioTrack(it); showAudioMenu = false },
-                                { showAudioMenu = false })
+                            FixedWidthPanel(isLandscape) {
+                                DynamicAudioMenu(
+                                    state.selectedAudioTrack,
+                                    { viewModel.setAudioTrack(it); showAudioMenu = false },
+                                    { showAudioMenu = false })
+                            }
                         }
                         AnimatedVisibility(
                             visible = showSpeedMenu,
                             enter = GlassAnimations.SubMenuEnter,
                             exit = GlassAnimations.SubMenuExit
                         ) {
-                            DynamicSpeedMenu(
-                                state.playbackSpeed,
-                                { viewModel.setPlaybackSpeed(it); showSpeedMenu = false },
-                                { showSpeedMenu = false })
+                            FixedWidthPanel(isLandscape) {
+                                DynamicSpeedMenu(
+                                    state.playbackSpeed,
+                                    { viewModel.setPlaybackSpeed(it); showSpeedMenu = false },
+                                    { showSpeedMenu = false })
+                            }
                         }
                         AnimatedVisibility(
                             visible = showSleepTimerMenu,
                             enter = GlassAnimations.SubMenuEnter,
                             exit = GlassAnimations.SubMenuExit
-                        ) { DynamicSleepTimerMenu(viewModel) { showSleepTimerMenu = false } }
+                        ) {
+                            FixedWidthPanel(isLandscape) {
+                                DynamicSleepTimerMenu(viewModel) { showSleepTimerMenu = false }
+                            }
+                        }
                         AnimatedVisibility(
                             visible = showSubtitleMenu,
                             enter = GlassAnimations.SubMenuEnter,
                             exit = GlassAnimations.SubMenuExit
                         ) {
-                            DynamicSubtitleMenu(
-                                tracks = state.availableSubtitleTracks,
-                                selectedTrack = state.selectedSubtitleTrack,
-                                onTrackSelected = { t ->
-                                    viewModel.selectSubtitleTrack(t); showSubtitleMenu = false
-                                },
-                                onDisable = {
-                                    viewModel.selectSubtitleTrack(null); showSubtitleMenu = false
-                                },
-                                onLoadExternal = { subtitlePickerLauncher.launch(arrayOf("*/*")) },  // 👈 new
-                                onDismiss = { showSubtitleMenu = false }
-                            )
+                            FixedWidthPanel(isLandscape) {
+                                DynamicSubtitleMenu(
+                                    tracks = state.availableSubtitleTracks,
+                                    selectedTrack = state.selectedSubtitleTrack,
+                                    onTrackSelected = { t ->
+                                        viewModel.selectSubtitleTrack(t); showSubtitleMenu = false
+                                    },
+                                    onDisable = {
+                                        viewModel.selectSubtitleTrack(null); showSubtitleMenu =
+                                        false
+                                    },
+                                    onLoadExternal = { subtitlePickerLauncher.launch(arrayOf("*/*")) },  // 👈 new
+                                    onDismiss = { showSubtitleMenu = false }
+                                )
+                            }
                         }
 
                         AnimatedVisibility(
@@ -1719,24 +1714,34 @@ fun ExoPlayerScreen(
                 enter = GlassAnimations.PanelEnter,
                 exit = GlassAnimations.PanelExit,
                 modifier = Modifier.align(Alignment.BottomCenter)
-            ) { DynamicVideoAdjustmentsPanel(viewModel, state) { showVideoAdjustments = false } }
+            ) {
+                FixedWidthPanel(isLandscape) {
+                    DynamicVideoAdjustmentsPanel(viewModel, state) { showVideoAdjustments = false }
+                }
+            }
             AnimatedVisibility(
                 visible = showAdvancedMenu && !state.isScreenLocked,
                 enter = GlassAnimations.PanelEnter,
                 exit = GlassAnimations.PanelExit,
                 modifier = Modifier.align(Alignment.BottomCenter)
-            ) { DynamicAdvancedControlsPanel(viewModel, state) { showAdvancedMenu = false } }
+            ) {
+                FixedWidthPanel(isLandscape) {
+                    DynamicAdvancedControlsPanel(viewModel, state) { showAdvancedMenu = false }
+                }
+            }
             AnimatedVisibility(
                 visible = showEqualizerPanel && !state.isScreenLocked,
                 enter = GlassAnimations.PanelEnter,
                 exit = GlassAnimations.PanelExit,
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
+                FixedWidthPanel(isLandscape) {
                 DynamicEqualizerPanel(
                     viewModel = viewModel,
                     state = state,
                     errorColor = errorColor
                 ) { showEqualizerPanel = false }
+            }
             }
             AnimatedVisibility(
                 visible = showVideoInfo && !state.isScreenLocked,
@@ -1744,12 +1749,14 @@ fun ExoPlayerScreen(
                 exit = GlassAnimations.PanelExit,
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
-                VideoInfoPanel(
-                    viewModel,
-                    state.currentVideo ?: video,
-                    state,
-                    thumbnailBitmap
-                ) { showVideoInfo = false }
+                FixedWidthPanel(isLandscape) {
+                    VideoInfoPanel(
+                        viewModel,
+                        state.currentVideo ?: video,
+                        state,
+                        thumbnailBitmap
+                    ) { showVideoInfo = false }
+                }
             }
         }
     }
@@ -1805,7 +1812,6 @@ fun SlideToUnlock(
     val primaryColor = MaterialTheme.colorScheme.primary
     val onPrimary = MaterialTheme.colorScheme.onPrimary
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val textPrimary = GlassTokens.getTextPrimary()
 
     val sliderProgress = remember { Animatable(0f) }
@@ -1815,17 +1821,7 @@ fun SlideToUnlock(
 
     // Pulsing chevron animation
     val infiniteTransition = rememberInfiniteTransition(label = "chevron")
-    val chevronAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.25f,
-        targetValue = 0.75f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "chevAlpha"
-    )
 
-    // Thumb fill color interpolates primary → bright as progress increases
     val thumbColor by animateColorAsState(
         targetValue = if (isUnlocked) primaryColor
         else primaryColor.copy(alpha = 0.85f + sliderProgress.value * 0.15f),
@@ -3505,5 +3501,22 @@ private fun GlassInfoRow(label: String, value: String, isPath: Boolean = false) 
 
 
 
-
-
+@Composable
+private fun FixedWidthPanel(
+    isLandscape: Boolean,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .wrapContentWidth(Alignment.CenterHorizontally) // centers it
+    ) {
+        Box(
+            modifier = Modifier
+                .width(if (isLandscape) 360.dp else 420.dp)
+                .padding(horizontal = if (isLandscape) 0.dp else 16.dp)
+        ) {
+            content()
+        }
+    }
+}
